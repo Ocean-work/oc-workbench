@@ -1,12 +1,23 @@
+sub_id = "static-web"
+name = "o_C总控"
 project_type = "web"
-
-[build]
-command = ""
-output_dir = "."
-
-[install]
-command = ""
+version = "0.1.0"
+requires = ["python-3.12"]
+preview_enable = "enabled"
 
 [dev]
-command = ""
-port = 8080
+command = "sh scripts/run.sh"
+port = 5000
+
+[deploy]
+profile.kind = "service"
+profile.flavor = "web"
+
+[deploy.build]
+command = "sh scripts/build.sh"
+
+[deploy.run]
+command = "sh scripts/run.sh"
+
+[subprojects]
+static-web = "Static Web Server"
