@@ -390,7 +390,8 @@ function PasswordModal({ onSuccess, onClose }) {
    ========================================================== */
 
 function Sidebar({ onLock }) {
-  const location = useLocation();
+  const { path: locationPath } = useHashRoute();
+  const location = { pathname: locationPath };
   const [unlocked, setUnlocked] = useState(isUnlocked());
 
   useEffect(() => {

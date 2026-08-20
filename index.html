@@ -9,12 +9,7 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 </head>
 <body>
-  <div id="root">
-    <div style="padding:40px;color:#888;background:#1a1a2e;min-height:100vh;font-family:sans-serif;">
-      <h2>🔄 正在加载 o_C 总控...</h2>
-      <p>如果长时间停留在此页面，请按 F12 打开控制台查看错误信息。</p>
-    </div>
-  </div>
+  <div id="root"></div>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script type="text/babel">
 /* ===== 错误边界 ===== */
@@ -41,8 +36,6 @@ class ErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
-
-console.log("o_C 总控 - 脚本加载完成");
 
 /* ==========================================================
    o_C 总控 · 一体化工作台
@@ -436,7 +429,8 @@ function PasswordModal({ onSuccess, onClose }) {
    ========================================================== */
 
 function Sidebar({ onLock }) {
-  const location = useLocation();
+  const { path: locationPath } = useHashRoute();
+  const location = { pathname: locationPath };
   const [unlocked, setUnlocked] = useState(isUnlocked());
 
   useEffect(() => {
@@ -1324,19 +1318,12 @@ function App() {
 // 入口在 index.html 的 debug_wrapper 中（ErrorBoundary 包裹）
 
 
-console.log("o_C 总控 - 开始渲染...");
 const root = ReactDOM.createRoot(document.getElementById('root'));
-try {
-  root.render(
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>
-  );
-  console.log("o_C 总控 - 渲染成功");
-} catch(e) {
-  console.error("o_C 总控 - 启动异常:", e);
-  document.getElementById('root').innerHTML = '<div style="padding:40px;color:#ff6b6b;background:#1a1a2e;min-height:100vh;"><h2>启动失败</h2><pre>' + e.toString() + '</pre></div>';
-}
+root.render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>
+);
 
   </script>
 </body>
