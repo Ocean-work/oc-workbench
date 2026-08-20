@@ -1,23 +1,24 @@
-sub_id = "static-web"
+[project]
+sub_id = "oc-console"
 name = "o_C总控"
+requires = ["python-3.12"]
 project_type = "web"
 version = "0.1.0"
-requires = ["python-3.12"]
+
+[preview]
 preview_enable = "enabled"
 
 [dev]
-command = "sh scripts/run.sh"
-port = 5000
+build = ["bash", "scripts/build.sh"]
+run = ["bash", "scripts/run.sh"]
 
 [deploy]
-profile.kind = "service"
-profile.flavor = "web"
+build = ["bash", "scripts/build.sh"]
+run = ["bash", "scripts/run.sh"]
 
-[deploy.build]
-command = "sh scripts/build.sh"
-
-[deploy.run]
-command = "sh scripts/run.sh"
+[deploy.profile]
+kind = "service"
+flavor = "web"
 
 [subprojects]
-static-web = "Static Web Server"
+path = ["."]
