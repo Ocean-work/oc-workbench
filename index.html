@@ -239,11 +239,30 @@ const FEISHU_PROXY = 'https://feishu-proxy.brhwkpv7d5.workers.dev';
 
 async function proxyFetch(targetUrl, options = {}) {
   // 将飞书地址转换为代理地址
-  // targetUrl 是完整的飞书 API 地址：https://open.feishu.cn/open-apis/xxx
-  // 代理地址格式：https://feishu-proxy.xxx.workers.dev/open-apis/xxx
   const path = targetUrl.replace('https://open.feishu.cn', '');
   const url = FEISHU_PROXY + path;
-  return await fetch(url, options);
+  
+  // 最多重试 3 次（应对 Worker 冷启动 / 网络抖动）
+  let lastError = null;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超时
+      const res = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      return res;
+    } catch (e) {
+      lastError = e;
+      console.warn(`代理请求第 ${i+1} 次失败:`, e.message);
+      if (i < 2) {
+        await new Promise(r => setTimeout(r, 500 * (i + 1))); // 递增等待
+      }
+    }
+  }
+  throw lastError || new Error('代理请求失败');
 }
 
 // 从 localStorage 读取配置（用户可自定义密钥）
