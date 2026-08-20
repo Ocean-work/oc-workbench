@@ -1295,19 +1295,19 @@ function ModuleManagePage({ modules, onModulesChange }) {
                   />
                 </div>
                 <div className="form-group">
-                  <label>路径标识 {editingModule ? '' : '(自动生成)'}</label>
+                  <label>路径标识（自动生成）</label>
                   <input
                     type="text"
                     value={formData['路径标识'] || ''}
                     onChange={e => setFormData({ ...formData, '路径标识': e.target.value.replace(/[^a-zA-Z0-9-]/g, '') })}
                     placeholder="英文小写，如 teaching"
-                    readOnly={!editingModule}
-                    className={!editingModule ? 'input-readonly' : ''}
+                    readOnly
+                    className="input-readonly"
                     required
                   />
-                  {!editingModule && (
-                    <div className="form-hint text-xs text-muted">根据模块名称自动生成，创建后可修改</div>
-                  )}
+                  <div className="form-hint text-xs text-muted">
+                    {editingModule ? '创建后不可修改，用于网址定位' : '根据模块名称自动生成，创建后不可修改'}
+                  </div>
                 </div>
               </div>
               <div className="form-row">
