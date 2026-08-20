@@ -196,8 +196,32 @@ const FEISHU_TABLE_ID = 'tblBiChovnHiqblx';
 const FEISHU_LINK_TABLE_ID = 'tblmJxq9iOtGLmDz';
 const FEISHU_BASE = 'https://open.feishu.cn/open-apis';
 
-// CORS 代理（用于绕过飞书 API 的跨域限制）
-const CORS_PROXY = 'https://corsproxy.io/?';
+// CORS 代理列表（按优先级尝试，绕过飞书 API 跨域限制）
+const CORS_PROXIES = [
+  'https://corsproxy.io/?',
+  'https://api.allorigins.win/raw?url=',
+  'https://api.codetabs.com/v1/proxy?quest=',
+];
+let workingProxyIndex = 0;
+
+async function proxyFetch(targetUrl, options = {}) {
+  // 从当前已知可用的代理开始尝试
+  for (let i = 0; i < CORS_PROXIES.length; i++) {
+    const idx = (workingProxyIndex + i) % CORS_PROXIES.length;
+    const proxy = CORS_PROXIES[idx];
+    const url = proxy + encodeURIComponent(targetUrl);
+    try {
+      const res = await fetch(url, options);
+      if (res.ok) {
+        workingProxyIndex = idx; // 记住可用的代理
+        return res;
+      }
+    } catch (e) {
+      console.warn(`代理 ${proxy} 不可用，尝试下一个...`);
+    }
+  }
+  throw new Error('所有 CORS 代理均不可用，请检查网络连接');
+}
 
 // 从 localStorage 读取配置（用户可自定义密钥）
 function getConfig() {
@@ -225,8 +249,8 @@ async function getAccessToken() {
     return cachedToken;
   }
 
-  const url = CORS_PROXY + encodeURIComponent(`${FEISHU_BASE}/auth/v3/tenant_access_token/internal`);
-  const res = await fetch(url, {
+  const targetUrl = `${FEISHU_BASE}/auth/v3/tenant_access_token/internal`;
+  const res = await proxyFetch(targetUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -245,8 +269,8 @@ async function getAccessToken() {
 
 async function feishuRequest(path, options = {}) {
   const token = await getAccessToken();
-  const url = CORS_PROXY + encodeURIComponent(`${FEISHU_BASE}${path}`);
-  const res = await fetch(url, {
+  const targetUrl = `${FEISHU_BASE}${path}`;
+  const res = await proxyFetch(targetUrl, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
