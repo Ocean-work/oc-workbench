@@ -1120,3 +1120,145 @@ input, textarea, select {
     grid-template-columns: 1fr;
   }
 }
+
+/* ===== 模块管理页面 ===== */
+.module-manage-page {
+  padding: 32px;
+}
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+.module-card {
+  padding: 20px;
+  border-top: 3px solid var(--accent-blue);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: transform 0.2s;
+}
+.module-card:hover {
+  transform: translateY(-2px);
+}
+.module-card.theme-blue { border-top-color: var(--accent-blue); }
+.module-card.theme-purple { border-top-color: var(--accent-purple); }
+.module-card.theme-pink { border-top-color: var(--accent-pink); }
+.module-card.theme-cyan { border-top-color: var(--accent-cyan); }
+.module-card.theme-green { border-top-color: var(--accent-green); }
+.module-card.theme-yellow { border-top-color: var(--accent-yellow); }
+.module-card.theme-orange { border-top-color: var(--accent-orange); }
+.module-card.theme-red { border-top-color: var(--accent-red); }
+
+.module-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.module-icon {
+  font-size: 28px;
+}
+.module-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+.module-desc {
+  line-height: 1.5;
+  min-height: 40px;
+}
+.module-meta {
+  color: var(--text-muted);
+}
+.module-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* 图标选择器 */
+.icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 120px;
+  overflow-y: auto;
+  padding: 8px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+.icon-option {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.icon-option:hover {
+  background: var(--bg-hover);
+}
+.icon-option.active {
+  border-color: var(--accent-blue);
+  background: rgba(99, 102, 241, 0.15);
+}
+
+/* 颜色选择器 */
+.color-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+.color-option {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.color-option:hover {
+  transform: scale(1.1);
+}
+.color-option.active {
+  border-color: white;
+  box-shadow: 0 0 0 2px var(--accent-blue);
+}
+.color-blue { background: var(--accent-blue); }
+.color-purple { background: var(--accent-purple); }
+.color-pink { background: var(--accent-pink); }
+.color-cyan { background: var(--accent-cyan); }
+.color-green { background: var(--accent-green); }
+.color-yellow { background: var(--accent-yellow); }
+.color-orange { background: var(--accent-orange); }
+.color-red { background: var(--accent-red); }
+
+/* 侧边栏模块管理按钮 */
+.nav-manage-btn {
+  cursor: pointer;
+  opacity: 0.7;
+  border-top: 1px solid var(--border-color);
+  margin-top: 8px;
+  padding-top: 12px;
+}
+.nav-manage-btn:hover {
+  opacity: 1;
+  background: var(--sidebar-hover);
+}

@@ -44,8 +44,8 @@ function Route({ path, element }) { return null; }
    常量与工具函数
    ========================================================== */
 
-// 模块列表
-const MODULES = [
+// 默认模块列表（降级用，实际从飞书表加载）
+const DEFAULT_MODULES = [
   { key: '教学管理', icon: '📚', color: 'blue', path: '/teaching' },
   { key: '自媒体运营', icon: '✨', color: 'purple', path: '/media' },
   { key: '国际中文教学', icon: '🌏', color: 'cyan', path: '/chinese' },
@@ -194,6 +194,7 @@ const FEISHU_APP_SECRET = ''; // 在设置面板中配置
 const FEISHU_APP_TOKEN = 'ZGcrbdAztars3CsTFtAcUciLn9e';
 const FEISHU_TABLE_ID = 'tblBiChovnHiqblx';
 const FEISHU_LINK_TABLE_ID = 'tblmJxq9iOtGLmDz';
+const FEISHU_MODULE_TABLE_ID = 'tblo2A5lbJxcP7Jx';
 const FEISHU_BASE = 'https://open.feishu.cn/open-apis';
 
 // 飞书 API 代理（Cloudflare Workers）
@@ -239,6 +240,7 @@ function getConfig() {
     appToken: FEISHU_APP_TOKEN,
     tableId: FEISHU_TABLE_ID,
     linkTableId: FEISHU_LINK_TABLE_ID,
+    moduleTableId: FEISHU_MODULE_TABLE_ID,
   };
 }
 
@@ -356,6 +358,63 @@ async function deleteRecord(recordId) {
   return data;
 }
 
+// 获取业务模块列表
+async function getModules() {
+  const config = getConfig();
+  const data = await feishuRequest(
+    `/bitable/v1/apps/${config.appToken}/tables/${config.moduleTableId}/records?page_size=200`
+  );
+  const items = (data.items || [])
+    .map(item => ({
+      record_id: item.record_id,
+      key: item.fields['模块名称'] || '',
+      icon: item.fields['图标'] || '📁',
+      color: item.fields['主题色'] || 'blue',
+      path: '/' + (item.fields['路径标识'] || ''),
+      pathKey: item.fields['路径标识'] || '',
+      sort: item.fields['排序'] || 99,
+      description: item.fields['描述'] || '',
+    }))
+    .sort((a, b) => a.sort - b.sort);
+  return items;
+}
+
+// 创建业务模块
+async function createModule(fields) {
+  const config = getConfig();
+  const data = await feishuRequest(
+    `/bitable/v1/apps/${config.appToken}/tables/${config.moduleTableId}/records`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ fields }),
+    }
+  );
+  return data.record;
+}
+
+// 更新业务模块
+async function updateModule(recordId, fields) {
+  const config = getConfig();
+  const data = await feishuRequest(
+    `/bitable/v1/apps/${config.appToken}/tables/${config.moduleTableId}/records/${recordId}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ fields }),
+    }
+  );
+  return data.record;
+}
+
+// 删除业务模块
+async function deleteModule(recordId) {
+  const config = getConfig();
+  const data = await feishuRequest(
+    `/bitable/v1/apps/${config.appToken}/tables/${config.moduleTableId}/records/${recordId}`,
+    { method: 'DELETE' }
+  );
+  return data;
+}
+
 // 获取外部链接
 async function getLinks() {
   const config = getConfig();
@@ -427,7 +486,7 @@ function PasswordModal({ onSuccess, onClose }) {
    组件：侧边栏
    ========================================================== */
 
-function Sidebar({ onLock }) {
+function Sidebar({ onLock, modules, onModulesChange }) {
   const { path: locationPath } = useHashRoute();
   const location = { pathname: locationPath };
   const [unlocked, setUnlocked] = useState(isUnlocked());
@@ -464,12 +523,16 @@ function Sidebar({ onLock }) {
           <span>业务模块</span>
         </div>
 
-        {MODULES.map(m => (
+        {modules.map(m => (
           <NavLink key={m.key} to={m.path} className="nav-item">
             <span className="nav-icon">{m.icon}</span>
             <span className="nav-text">{m.key}</span>
           </NavLink>
         ))}
+        <div className="nav-item nav-manage-btn" onClick={() => window.location.hash = '/module-manage'}>
+          <span className="nav-icon">⚙️</span>
+          <span className="nav-text">模块管理</span>
+        </div>
       </nav>
 
       <div className="sidebar-footer">
@@ -1031,10 +1094,207 @@ function ModulePage({ moduleName, icon, color }) {
 }
 
 /* ==========================================================
+   页面：模块管理 ModuleManagePage
+   ========================================================== */
+
+const COLOR_OPTIONS = ['blue', 'purple', 'pink', 'cyan', 'green', 'yellow', 'orange', 'red'];
+const ICON_OPTIONS = ['📚', '✨', '🌏', '🎬', '🎓', '💰', '💡', '📝', '🎯', '🚀', '🌟', '📊', '🎨', '🎵', '🏃', '💪', '🧠', '❤️', '🌱', '🏠'];
+
+function ModuleManagePage({ modules, onModulesChange }) {
+  const [showForm, setShowForm] = useState(false);
+  const [editingModule, setEditingModule] = useState(null);
+  const [formData, setFormData] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  const openAddForm = () => {
+    setEditingModule(null);
+    setFormData({
+      '模块名称': '',
+      '图标': '📁',
+      '主题色': 'blue',
+      '路径标识': '',
+      '排序': modules.length + 1,
+      '描述': '',
+    });
+    setShowForm(true);
+  };
+
+  const openEditForm = (mod) => {
+    setEditingModule(mod);
+    setFormData({
+      '模块名称': mod.key,
+      '图标': mod.icon,
+      '主题色': mod.color,
+      '路径标识': mod.pathKey,
+      '排序': mod.sort,
+      '描述': mod.description,
+    });
+    setShowForm(true);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData['模块名称'] || !formData['路径标识']) {
+      alert('请填写模块名称和路径标识');
+      return;
+    }
+    try {
+      setSaving(true);
+      if (editingModule) {
+        await updateModule(editingModule.record_id, formData);
+      } else {
+        await createModule(formData);
+      }
+      setShowForm(false);
+      onModulesChange();
+    } catch (err) {
+      alert('保存失败：' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (mod) => {
+    if (!confirm(`确定删除模块「${mod.key}」吗？\n\n注意：只会删除模块定义，该模块下的任务数据仍然保留在数据表中。`)) return;
+    try {
+      await deleteModule(mod.record_id);
+      onModulesChange();
+    } catch (err) {
+      alert('删除失败：' + err.message);
+    }
+  };
+
+  return (
+    <div className="module-manage-page">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">⚙️ 模块管理</h1>
+          <p className="page-subtitle">管理业务模块的名称、图标、颜色和排序</p>
+        </div>
+        <button className="btn btn-primary" onClick={openAddForm}>
+          + 新建模块
+        </button>
+      </div>
+
+      <div className="module-grid">
+        {modules.map(mod => (
+          <div key={mod.record_id || mod.key} className={`module-card card theme-${mod.color}`}>
+            <div className="module-card-header">
+              <span className="module-icon">{mod.icon}</span>
+              <h3 className="module-name">{mod.key}</h3>
+            </div>
+            {mod.description && (
+              <p className="module-desc text-secondary text-sm">{mod.description}</p>
+            )}
+            <div className="module-meta text-xs text-muted">
+              路径: /{mod.pathKey} · 排序: {mod.sort}
+            </div>
+            <div className="module-actions">
+              <button className="btn btn-secondary btn-sm" onClick={() => openEditForm(mod)}>✏️ 编辑</button>
+              <button className="btn btn-danger-ghost btn-sm" onClick={() => handleDelete(mod)}>🗑 删除</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {showForm && (
+        <div className="modal-overlay" onClick={() => setShowForm(false)}>
+          <div className="modal-content form-modal" onClick={e => e.stopPropagation()}>
+            <h2 className="form-title">{editingModule ? '编辑模块' : '新建模块'}</h2>
+            <form onSubmit={handleSubmit}>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>模块名称 *</label>
+                  <input
+                    type="text"
+                    value={formData['模块名称'] || ''}
+                    onChange={e => setFormData({ ...formData, '模块名称': e.target.value })}
+                    placeholder="如：教学管理"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>路径标识 *</label>
+                  <input
+                    type="text"
+                    value={formData['路径标识'] || ''}
+                    onChange={e => setFormData({ ...formData, '路径标识': e.target.value.replace(/[^a-zA-Z0-9-]/g, '') })}
+                    placeholder="英文小写，如 teaching"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>图标</label>
+                  <div className="icon-picker">
+                    {ICON_OPTIONS.map(ic => (
+                      <button
+                        key={ic}
+                        type="button"
+                        className={`icon-option ${formData['图标'] === ic ? 'active' : ''}`}
+                        onClick={() => setFormData({ ...formData, '图标': ic })}
+                      >
+                        {ic}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>主题色</label>
+                  <div className="color-picker">
+                    {COLOR_OPTIONS.map(c => (
+                      <button
+                        key={c}
+                        type="button"
+                        className={`color-option color-${c} ${formData['主题色'] === c ? 'active' : ''}`}
+                        onClick={() => setFormData({ ...formData, '主题色': c })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>排序</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData['排序'] || 1}
+                    onChange={e => setFormData({ ...formData, '排序': Number(e.target.value) })}
+                  />
+                </div>
+              </div>
+              <div className="form-group">
+                <label>描述</label>
+                <textarea
+                  value={formData['描述'] || ''}
+                  onChange={e => setFormData({ ...formData, '描述': e.target.value })}
+                  placeholder="模块说明..."
+                  rows={2}
+                />
+              </div>
+              <div className="form-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>
+                  取消
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>
+                  {saving ? '保存中...' : (editingModule ? '保存修改' : '创建模块')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ==========================================================
    页面：总看板 Dashboard
    ========================================================== */
 
-function Dashboard() {
+function Dashboard({ modules }) {
   const [records, setRecords] = useState([]);
   const [links, setLinks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1071,7 +1331,7 @@ function Dashboard() {
   const overallStats = calcStatusStats(visibleRecords);
   const moduleGroups = groupByModule(visibleRecords);
 
-  const moduleStats = MODULES.map(m => {
+  const moduleStats = modules.map(m => {
     const items = moduleGroups[m.key] || [];
     return {
       ...m,
@@ -1310,9 +1570,29 @@ function Dashboard() {
 
 function App() {
   const [unlocked, setUnlocked] = useState(isUnlocked());
+  const [modules, setModules] = useState(DEFAULT_MODULES);
+  const [modulesLoading, setModulesLoading] = useState(true);
 
   const handleUnlock = () => setUnlocked(true);
   const handleLock = () => setUnlocked(false);
+
+  const loadModules = async () => {
+    try {
+      setModulesLoading(true);
+      const m = await getModules();
+      if (m && m.length > 0) {
+        setModules(m);
+      }
+    } catch (err) {
+      console.warn('加载模块列表失败，使用默认模块:', err.message);
+    } finally {
+      setModulesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadModules();
+  }, []);
 
   useEffect(() => {
     const check = () => setUnlocked(isUnlocked());
@@ -1322,11 +1602,14 @@ function App() {
 
   return (
     <div className="app-layout">
-      <Sidebar onLock={handleLock} />
+      <Sidebar onLock={handleLock} modules={modules} />
       <main className="app-main">
         <Routes>
-          <Route path="/" element={<Dashboard />} />
-          {MODULES.map(m => (
+          <Route path="/" element={<Dashboard modules={modules} />} />
+          <Route path="/module-manage" element={
+            <ModuleManagePage modules={modules} onModulesChange={loadModules} />
+          } />
+          {modules.map(m => (
             <Route
               key={m.key}
               path={m.path}
