@@ -327,6 +327,16 @@ async function archiveRecord(recordId, currentFields = {}) {
   });
 }
 
+// 删除记录
+async function deleteRecord(recordId) {
+  const config = getConfig();
+  const data = await feishuRequest(
+    `/bitable/v1/apps/${config.appToken}/tables/${config.tableId}/records/${recordId}`,
+    { method: 'DELETE' }
+  );
+  return data;
+}
+
 // 获取外部链接
 async function getLinks() {
   const config = getConfig();
@@ -583,12 +593,27 @@ function ModulePage({ moduleName, icon, color }) {
   };
 
   const handleArchive = async (record) => {
-    if (!confirm('确定归档这条任务吗？')) return;
+    const isArchived = record.fields['任务状态'] === '归档';
+    if (!confirm(isArchived ? '确定从归档恢复这条任务吗？' : '确定归档这条任务吗？')) return;
     try {
-      await archiveRecord(record.record_id, record.fields);
+      if (isArchived) {
+        await updateRecord(record.record_id, { '任务状态': '待执行', '隐私状态': '公开' });
+      } else {
+        await archiveRecord(record.record_id, record.fields);
+      }
       loadRecords();
     } catch (err) {
-      alert('归档失败：' + err.message);
+      alert('操作失败：' + err.message);
+    }
+  };
+
+  const handleDelete = async (record) => {
+    if (!confirm('确定彻底删除这条任务吗？删除后无法恢复。')) return;
+    try {
+      await deleteRecord(record.record_id);
+      loadRecords();
+    } catch (err) {
+      alert('删除失败：' + err.message);
     }
   };
 
@@ -715,6 +740,7 @@ function ModulePage({ moduleName, icon, color }) {
                       <button className="action-btn" title={isArchived ? '恢复' : '归档'} onClick={() => handleArchive(record)}>
                         {isArchived ? '↩️' : '📦'}
                       </button>
+                      <button className="action-btn action-danger" title="删除" onClick={() => handleDelete(record)}>🗑</button>
                     </div>
                   </div>
 
@@ -954,6 +980,19 @@ function ModulePage({ moduleName, icon, color }) {
               </div>
             )}
             <div className="detail-footer">
+              <button
+                className="btn btn-danger-ghost"
+                onClick={() => {
+                  if (confirm('确定彻底删除这条任务吗？删除后无法恢复。')) {
+                    deleteRecord(viewRecord.record_id).then(() => {
+                      setViewRecord(null);
+                      loadRecords();
+                    }).catch(e => alert('删除失败：' + e.message));
+                  }
+                }}
+              >
+                🗑 删除
+              </button>
               <button className="btn btn-secondary" onClick={() => setViewRecord(null)}>关闭</button>
               <button
                 className="btn btn-primary"
