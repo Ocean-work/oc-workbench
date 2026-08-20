@@ -1,0 +1,12 @@
+project_type = "web"
+
+[build]
+command = ""
+output_dir = "."
+
+[install]
+command = ""
+
+[dev]
+command = ""
+port = 8080

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>o_C 总控 · 一体化工作台</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- React & ReactDOM (UMD) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- React Router (react-router-dom 依赖 react-router) -->
+  <script crossorigin src="https://unpkg.com/react-router@6.16.0/dist/umd/react-router.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-router-dom@6.16.0/dist/umd/react-router-dom.production.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <!-- Babel Standalone 用于运行时编译 JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- 应用主文件（单文件包含所有组件） -->
+  <script type="text/babel" data-presets="react" src="app.jsx"></script>
+</body>
+</html>
