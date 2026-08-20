@@ -7,8 +7,6 @@
   <link rel="stylesheet" href="styles.css" />
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-router@6.16.0/dist/umd/react-router.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-router-dom@6.16.0/dist/umd/react-router-dom.production.min.js"></script>
 </head>
 <body>
   <div id="root">
@@ -19,7 +17,6 @@
   </div>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script type="text/babel">
-
 /* ===== 错误边界 ===== */
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -37,7 +34,7 @@ class ErrorBoundary extends React.Component {
       return (
         <div style={{padding: '40px', color: '#ff6b6b', background: '#1a1a2e', minHeight: '100vh', fontFamily: 'sans-serif'}}>
           <h2>⚠️ 渲染错误</h2>
-          <pre style={{background: '#000', padding: '20px', borderRadius: '8px', overflow: 'auto'}}>{this.state.error}</pre>
+          <pre style={{background: '#000', padding: '20px', borderRadius: '8px', overflow: 'auto', whiteSpace: 'pre-wrap'}}>{this.state.error}</pre>
         </div>
       );
     }
@@ -45,8 +42,7 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-console.log("o_C 总控 - 脚本加载完成，开始初始化...");
-console.log("React:", typeof React, "ReactDOM:", typeof ReactDOM, "ReactRouterDOM:", typeof ReactRouterDOM);
+console.log("o_C 总控 - 脚本加载完成");
 
 /* ==========================================================
    o_C 总控 · 一体化工作台
@@ -54,7 +50,41 @@ console.log("React:", typeof React, "ReactDOM:", typeof ReactDOM, "ReactRouterDO
    ========================================================== */
 
 const { useState, useEffect, useMemo, useRef } = React;
-const { HashRouter, Routes, Route, NavLink, useLocation, Link } = ReactRouterDOM;
+// 极简 hash 路由实现
+function useHashRoute() {
+  const [hash, setHash] = React.useState(window.location.hash.slice(1) || '/');
+  React.useEffect(() => {
+    const handler = () => setHash(window.location.hash.slice(1) || '/');
+    window.addEventListener('hashchange', handler);
+    return () => window.removeEventListener('hashchange', handler);
+  }, []);
+  const navigate = (path) => { window.location.hash = path; };
+  return { path: hash, navigate };
+}
+
+function NavLink({ to, children, className, activeClassName }) {
+  const { path } = useHashRoute();
+  const isActive = path === to || (to !== '/' && path.startsWith(to));
+  const cls = (className || '') + (isActive ? ' ' + (activeClassName || 'active') : '');
+  return <a href={'#' + to} className={cls}>{children}</a>;
+}
+
+function Link({ to, children, className }) {
+  return <a href={'#' + to} className={className}>{children}</a>;
+}
+function Routes({ children }) {
+  const { path } = useHashRoute();
+  let matched = null;
+  React.Children.forEach(children, child => {
+    if (!matched && child.props.path === path) matched = child;
+  });
+  // fallback to first route if no match
+  if (!matched && React.Children.count(children) > 0) {
+    matched = React.Children.toArray(children).find(c => c.props.path === '/') || React.Children.toArray(children)[0];
+  }
+  return matched ? matched.props.element : null;
+}
+function Route({ path, element }) { return null; }
 
 /* ==========================================================
    常量与工具函数
@@ -1291,19 +1321,20 @@ function App() {
    入口
    ========================================================== */
 
-console.log("o_C 总控 - 开始渲染根组件...");
+// 入口在 index.html 的 debug_wrapper 中（ErrorBoundary 包裹）
+
+
+console.log("o_C 总控 - 开始渲染...");
 const root = ReactDOM.createRoot(document.getElementById('root'));
 try {
   root.render(
     <ErrorBoundary>
-      <HashRouter>
-        <App />
-      </HashRouter>
+      <App />
     </ErrorBoundary>
   );
-  console.log("o_C 总控 - 根组件渲染完成");
+  console.log("o_C 总控 - 渲染成功");
 } catch(e) {
-  console.error("o_C 总控 - 渲染异常:", e);
+  console.error("o_C 总控 - 启动异常:", e);
   document.getElementById('root').innerHTML = '<div style="padding:40px;color:#ff6b6b;background:#1a1a2e;min-height:100vh;"><h2>启动失败</h2><pre>' + e.toString() + '</pre></div>';
 }
 

@@ -4,7 +4,41 @@
    ========================================================== */
 
 const { useState, useEffect, useMemo, useRef } = React;
-const { HashRouter, Routes, Route, NavLink, useLocation, Link } = ReactRouterDOM;
+// 极简 hash 路由实现
+function useHashRoute() {
+  const [hash, setHash] = React.useState(window.location.hash.slice(1) || '/');
+  React.useEffect(() => {
+    const handler = () => setHash(window.location.hash.slice(1) || '/');
+    window.addEventListener('hashchange', handler);
+    return () => window.removeEventListener('hashchange', handler);
+  }, []);
+  const navigate = (path) => { window.location.hash = path; };
+  return { path: hash, navigate };
+}
+
+function NavLink({ to, children, className, activeClassName }) {
+  const { path } = useHashRoute();
+  const isActive = path === to || (to !== '/' && path.startsWith(to));
+  const cls = (className || '') + (isActive ? ' ' + (activeClassName || 'active') : '');
+  return <a href={'#' + to} className={cls}>{children}</a>;
+}
+
+function Link({ to, children, className }) {
+  return <a href={'#' + to} className={className}>{children}</a>;
+}
+function Routes({ children }) {
+  const { path } = useHashRoute();
+  let matched = null;
+  React.Children.forEach(children, child => {
+    if (!matched && child.props.path === path) matched = child;
+  });
+  // fallback to first route if no match
+  if (!matched && React.Children.count(children) > 0) {
+    matched = React.Children.toArray(children).find(c => c.props.path === '/') || React.Children.toArray(children)[0];
+  }
+  return matched ? matched.props.element : null;
+}
+function Route({ path, element }) { return null; }
 
 /* ==========================================================
    常量与工具函数
@@ -1241,11 +1275,4 @@ function App() {
    入口
    ========================================================== */
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(
-  <React.StrictMode>
-    <HashRouter>
-      <App />
-    </HashRouter>
-  </React.StrictMode>
-);
+// 入口在 index.html 的 debug_wrapper 中（ErrorBoundary 包裹）
