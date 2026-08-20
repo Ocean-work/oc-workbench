@@ -198,11 +198,11 @@ const FEISHU_MODULE_TABLE_ID = 'tblo2A5lbJxcP7Jx';
 const FEISHU_BASE = 'https://open.feishu.cn/open-apis';
 
 // 飞书 API 代理（Cloudflare Workers）
-const FEISHU_PROXY = 'https://feishu-proxy.brhwkpv7d5.workers.dev';
+const FEISHU_PROXY = 'https://d78rws3qxj.coze.site/api/feishu';
 
 async function proxyFetch(targetUrl, options = {}) {
   // 将飞书地址转换为代理地址
-  const path = targetUrl.replace('https://open.feishu.cn', '');
+  const path = targetUrl.replace('https://open.feishu.cn/open-apis', '');
   const url = FEISHU_PROXY + path;
   
   // 最多重试 3 次（应对 Worker 冷启动 / 网络抖动）
