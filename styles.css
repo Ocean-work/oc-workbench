@@ -1262,3 +1262,12 @@ input, textarea, select {
   opacity: 1;
   background: var(--sidebar-hover);
 }
+
+.input-readonly {
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+.form-hint {
+  margin-top: 4px;
+}

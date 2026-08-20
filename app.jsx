@@ -1100,6 +1100,39 @@ function ModulePage({ moduleName, icon, color }) {
 const COLOR_OPTIONS = ['blue', 'purple', 'pink', 'cyan', 'green', 'yellow', 'orange', 'red'];
 const ICON_OPTIONS = ['📚', '✨', '🌏', '🎬', '🎓', '💰', '💡', '📝', '🎯', '🚀', '🌟', '📊', '🎨', '🎵', '🏃', '💪', '🧠', '❤️', '🌱', '🏠'];
 
+// 模块名到路径标识的常用映射（没有匹配的就用 module-数字）
+const NAME_PATH_MAP = {
+  '教学管理': 'teaching',
+  '自媒体运营': 'media',
+  '国际中文教学': 'chinese',
+  '动画项目矩阵': 'animation',
+  '同等学力申硕': 'degree',
+  '个人财务&生活': 'finance',
+  '个人财务': 'finance',
+  '生活管理': 'life',
+  '想法沉淀与目标对齐': 'ideas',
+  '想法沉淀': 'ideas',
+  '目标对齐': 'goals',
+  '读书学习': 'reading',
+  '健康管理': 'health',
+  '旅行记录': 'travel',
+  '项目管理': 'projects',
+  '效率工具': 'tools',
+  '写作创作': 'writing',
+  '副业体系': 'sidebiz',
+  '专业能力': 'career',
+};
+
+function generatePathKey(name) {
+  if (!name) return '';
+  if (NAME_PATH_MAP[name]) return NAME_PATH_MAP[name];
+  // 没有映射的话，用简单的字符替换
+  return name
+    .replace(/[&\s]/g, '-')
+    .replace(/[^a-zA-Z0-9-]/g, '')
+    .toLowerCase() || 'new-module';
+}
+
 function ModuleManagePage({ modules, onModulesChange }) {
   const [showForm, setShowForm] = useState(false);
   const [editingModule, setEditingModule] = useState(null);
@@ -1117,6 +1150,16 @@ function ModuleManagePage({ modules, onModulesChange }) {
       '描述': '',
     });
     setShowForm(true);
+  };
+
+  // 模块名称变化时自动生成路径标识
+  const handleNameChange = (name) => {
+    const newData = { ...formData, '模块名称': name };
+    // 只有新建时才自动生成，编辑时保留原值
+    if (!editingModule) {
+      newData['路径标识'] = generatePathKey(name);
+    }
+    setFormData(newData);
   };
 
   const openEditForm = (mod) => {
@@ -1208,20 +1251,25 @@ function ModuleManagePage({ modules, onModulesChange }) {
                   <input
                     type="text"
                     value={formData['模块名称'] || ''}
-                    onChange={e => setFormData({ ...formData, '模块名称': e.target.value })}
+                    onChange={e => handleNameChange(e.target.value)}
                     placeholder="如：教学管理"
                     required
                   />
                 </div>
                 <div className="form-group">
-                  <label>路径标识 *</label>
+                  <label>路径标识 {editingModule ? '' : '(自动生成)'}</label>
                   <input
                     type="text"
                     value={formData['路径标识'] || ''}
                     onChange={e => setFormData({ ...formData, '路径标识': e.target.value.replace(/[^a-zA-Z0-9-]/g, '') })}
                     placeholder="英文小写，如 teaching"
+                    readOnly={!editingModule}
+                    className={!editingModule ? 'input-readonly' : ''}
                     required
                   />
+                  {!editingModule && (
+                    <div className="form-hint text-xs text-muted">根据模块名称自动生成，创建后可修改</div>
+                  )}
                 </div>
               </div>
               <div className="form-row">
