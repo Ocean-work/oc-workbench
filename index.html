@@ -1215,8 +1215,13 @@ function ModuleManagePage({ modules, onModulesChange }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData['模块名称'] || !formData['路径标识']) {
-      alert('请填写模块名称和路径标识');
+    if (!formData['模块名称']) {
+      alert('请填写模块名称');
+      return;
+    }
+    // 新建时校验路径标识（自动生成，一般不会空）
+    if (!editingModule && !formData['路径标识']) {
+      alert('路径标识生成失败，请重试');
       return;
     }
     try {
