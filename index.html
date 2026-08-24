@@ -262,6 +262,112 @@ window.apmPlus("start");
   font-size: 12px;
 }
 
+
+/* ====== 模块锁定功能样式 ====== */
+
+/* 模块管理页 - 锁定卡片内容模糊 */
+.module-card-locked .module-desc,
+.module-card-locked .module-meta {
+  filter: blur(6px);
+  user-select: none;
+  pointer-events: none;
+}
+.module-card-locked {
+  opacity: 0.7;
+}
+.module-lock-icon {
+  margin-left: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.2s;
+  display: inline-block;
+}
+.module-lock-icon:hover {
+  transform: scale(1.2);
+}
+
+/* 模块内 - 锁定态大锁 */
+.module-lock-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 100px 20px;
+  min-height: 500px;
+}
+.module-lock-content {
+  text-align: center;
+}
+.module-lock-big-icon-only {
+  font-size: 120px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  opacity: 0.6;
+  line-height: 1;
+}
+.module-lock-big-icon-only:hover {
+  opacity: 1;
+  transform: scale(1.1);
+  filter: drop-shadow(0 0 20px rgba(245,200,66,0.3));
+}
+.page-lock-icon {
+  margin-left: 8px;
+  font-size: 18px;
+}
+
+/* 解锁弹窗 */
+.module-lock-modal .password-icon {
+  font-size: 48px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+.module-lock-modal .password-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: center;
+  margin-bottom: 8px;
+}
+.module-lock-modal .password-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  text-align: center;
+  margin-bottom: 24px;
+}
+.module-lock-modal .password-input {
+  width: 100%;
+  padding: 12px 16px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-size: 15px;
+  box-sizing: border-box;
+}
+.module-lock-modal .password-input:focus {
+  outline: none;
+  border-color: #f5c842;
+}
+.module-lock-modal .password-error {
+  color: #f87171;
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+/* 侧边栏 - 修改解锁密码 */
+.sidebar-footer {
+  padding: 16px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.sidebar-change-pwd-btn {
+  cursor: pointer;
+  opacity: 0.7;
+  transition: all 0.2s;
+}
+.sidebar-change-pwd-btn:hover {
+  opacity: 1;
+  background: rgba(255,255,255,0.05);
+  border-radius: 10px;
+}
 </style>
 </head>
 <body>
@@ -1162,6 +1268,12 @@ function Sidebar({ onLock, modules, onModulesChange }) {
 
 
       {showPwd && <PasswordModal onClose={() => setShowPwd(false)} onSuccess={() => { setUnlocked(true); setShowPwd(false); }} />}
+      {showChangePwdModal && (
+        <ChangeLockPasswordModal
+          onSuccess={() => setShowChangePwdModal(false)}
+          onClose={() => setShowChangePwdModal(false)}
+        />
+      )}
     </aside>
   );
 }
