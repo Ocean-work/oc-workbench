@@ -1,12 +1,822 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<!DOCTYPE html><html lang="zh-CN"><head><!-- Coze Coding Analytics -->
+<script>
+(function(){
+  function randomUUID(){
+    if(typeof crypto!=="undefined"&&typeof crypto.randomUUID==="function"){
+      return crypto.randomUUID();
+    }
+    return "10000000-1000-4000-8000-100000000000".replace(/[018]/g,function(c){
+      return(+c^(crypto.getRandomValues(new Uint8Array(1))[0]&(15>>(+c/4)))).toString(16);
+    });
+  }
+
+  function encode(obj){return btoa(JSON.stringify(obj))}
+  function decode(str){try{return JSON.parse(atob(str))}catch(e){return null}}
+
+  function getDeviceId(){
+    var storageKey="__coze_coding_device_info";
+    try{
+      var info=decode(localStorage.getItem(storageKey));
+      if(info&&typeof info.did==="string"){return info.did}
+    }catch(e){}
+    var newInfo={did:randomUUID()};
+    try{localStorage.setItem(storageKey,encode(newInfo))}catch(e){}
+    return newInfo.did;
+  }
+
+  function sendPageViewEvent(){
+    var deviceId=getDeviceId();
+    var projectId="7676102851457712174";
+    var reportURL="https://code.coze.cn/api/coding/deployment/analytics/report?project_id="+encodeURIComponent(projectId)+"&did="+encodeURIComponent(deviceId);
+    try{
+      fetch(reportURL,{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          events:[{
+            type:"page_view",
+            url:window.location.href,
+            path:window.location.pathname,
+            referrer:document.referrer,
+            timestamp:Date.now()
+          }]
+        })
+      }).catch(function(){});
+    }catch(e){}
+  }
+
+  if(document.readyState==="complete"){
+    sendPageViewEvent();
+  }else{
+    document.addEventListener("readystatechange",function(){
+      if(document.readyState==="complete"){sendPageViewEvent()}
+    });
+  }
+})();
+</script>
+<!-- WebPro SDK -->
+<script>
+(function(n,e,r,t,a,o,s,i,c,l,f,m,p,u){o="precollect";s="getAttribute";i="addEventListener";c="PerformanceObserver";l=function(e){f=[].slice.call(arguments);f.push(Date.now(),location.href);(e==o?l.p.a:l.q).push(f)};l.q=[];l.p={a:[]};n[a]=l;m=document.createElement("script");m.src=r+"?aid="+t+"&globalName="+a;m.crossOrigin="anonymous";e.getElementsByTagName("head")[0].appendChild(m);if(i in n){l.pcErr=function(e){e=e||n.event;p=e.target||e.srcElement;if(p instanceof Element||p instanceof HTMLElement){n[a](o,"st",{tagName:p.tagName,url:p[s]("href")||p[s]("src")})}else{n[a](o,"err",e.error||e.message)}};l.pcRej=function(e){e=e||n.event;n[a](o,"reject",e.reason||e.detail&&e.detail.reason)};n[i]("error",l.pcErr,true);n[i]("unhandledrejection",l.pcRej,true)}if("PerformanceLongTaskTiming"in n){u=l.pp={entries:[]};u.observer=new PerformanceObserver(function(e){u.entries=u.entries.concat(e.getEntries())});u.observer.observe({entryTypes:["longtask"]})}})(window,document,"https://apm.volccdn.com/mars-web/apmplus/web/browser.cn.js",1001891,"apmPlus");
+</script>
+<script>
+window.apmPlus("context.set", "project_id", "7676102851457712174");
+window.apmPlus("init",{
+  aid: 1001891,
+  token: '26a8704bd4d34b1698085c787d0c95d0'
+});
+window.apmPlus("start");
+</script>
+
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>o_C 总控 · 一体化工作台</title>
-  <link rel="stylesheet" href="styles.css" />
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <link rel="stylesheet" href="styles.css"/>
+  <script crossorigin="" src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin="" src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<style>
+/* ==========================================================
+   财务模块 Finance
+   ========================================================== */
+
+.finance-page {
+  padding: 24px;
+  height: 100%;
+  overflow-y: auto;
+  color: #e8e8f0;
+}
+
+.finance-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding-bottom: 0;
+  flex-wrap: wrap;
+}
+
+.finance-tab {
+  padding: 10px 20px;
+  font-size: 14px;
+  color: #888;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.finance-tab:hover {
+  color: #e8e8f0;
+}
+
+.finance-tab.active {
+  color: #f5c842;
+  border-bottom-color: #f5c842;
+}
+
+.finance-content {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- 总览看板 ---- */
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.overview-grid .stat-card {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 20px;
+  transition: transform 0.2s, border-color 0.2s;
+}
+
+.overview-grid .stat-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(245,200,66,0.3);
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #888;
+  margin-bottom: 8px;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 600;
+  font-family: 'SF Mono', Menlo, monospace;
+}
+
+.stat-net .stat-value { color: #f5c842; }
+.stat-income .stat-value { color: #4ade80; }
+.stat-expense .stat-value { color: #f87171; }
+.stat-balance .stat-value { color: #60a5fa; }
+
+.stat-sub {
+  font-size: 12px;
+  color: #666;
+  margin-top: 6px;
+}
+
+/* ---- 图表区域 ---- */
+
+.chart-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.chart-card {
+  background: #1a1a2e;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.chart-title {
+  font-size: 15px;
+  font-weight: 500;
+  margin-bottom: 16px;
+  color: #e8e8f0;
+}
+
+.pie-chart-wrap {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.pie-chart {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.pie-chart::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: #1a1a2e;
+}
+
+.pie-legend {
+  flex: 1;
+  font-size: 13px;
+}
+
+.pie-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: #aaa;
+}
+
+.pie-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.pie-legend-value {
+  margin-left: auto;
+  font-family: 'SF Mono', Menlo, monospace;
+  color: #e8e8f0;
+}
+
+.chart-empty {
+  text-align: center;
+  color: #666;
+  padding: 40px 0;
+  font-size: 13px;
+}
+
+/* ---- 贷款进度区域 ---- */
+
+.loan-section {
+  background: #1a1a2e;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.loan-progress {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.loan-card {
+  background: rgba(255,255,255,0.03);
+  border-radius: 10px;
+  padding: 16px;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+
+.loan-name {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: #e8e8f0;
+}
+
+.loan-meta {
+  font-size: 12px;
+  color: #888;
+  margin-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.loan-bar-bg {
+  height: 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.loan-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f5c842, #f8a53c);
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.loan-remain {
+  font-size: 12px;
+  color: #aaa;
+  font-family: 'SF Mono', Menlo, monospace;
+}
+
+/* ---- 提醒区域 ---- */
+
+.reminder-section {
+  background: #1a1a2e;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.reminder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reminder-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.04);
+  font-size: 13px;
+}
+
+.reminder-type {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: rgba(245,200,66,0.15);
+  color: #f5c842;
+  flex-shrink: 0;
+}
+
+.reminder-title {
+  flex: 1;
+  color: #e8e8f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reminder-date {
+  color: #888;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.reminder-amount {
+  font-family: 'SF Mono', Menlo, monospace;
+  font-weight: 500;
+  color: #f87171;
+  flex-shrink: 0;
+  min-width: 80px;
+  text-align: right;
+}
+
+/* ---- 记账分区 ---- */
+
+.record-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.record-filter-group {
+  display: flex;
+  gap: 4px;
+  background: rgba(255,255,255,0.04);
+  padding: 3px;
+  border-radius: 8px;
+}
+
+.record-filter-btn {
+  padding: 6px 14px;
+  font-size: 13px;
+  border: none;
+  background: transparent;
+  color: #888;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.record-filter-btn:hover { color: #e8e8f0; }
+.record-filter-btn.active {
+  background: rgba(245,200,66,0.2);
+  color: #f5c842;
+}
+
+.month-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.month-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: transparent;
+  color: #888;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+.month-btn:hover { color: #e8e8f0; border-color: rgba(255,255,255,0.2); }
+
+.month-label {
+  font-size: 14px;
+  color: #e8e8f0;
+  min-width: 100px;
+  text-align: center;
+  font-family: 'SF Mono', Menlo, monospace;
+}
+
+.record-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.record-summary-item {
+  background: rgba(255,255,255,0.03);
+  border-radius: 10px;
+  padding: 14px 18px;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+
+.record-summary-label {
+  font-size: 12px;
+  color: #888;
+  margin-bottom: 4px;
+}
+
+.record-summary-value {
+  font-size: 20px;
+  font-weight: 600;
+  font-family: 'SF Mono', Menlo, monospace;
+}
+
+.record-summary-value.income { color: #4ade80; }
+.record-summary-value.expense { color: #f87171; }
+.record-summary-value.balance { color: #60a5fa; }
+
+.record-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.record-date-group {
+  margin-bottom: 20px;
+}
+
+.record-date-header {
+  font-size: 13px;
+  color: #888;
+  margin-bottom: 8px;
+  padding-left: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.record-date-total {
+  font-size: 12px;
+  font-family: 'SF Mono', Menlo, monospace;
+  color: #666;
+}
+
+.record-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #1a1a2e;
+  border: 1px solid rgba(255,255,255,0.04);
+  border-bottom: none;
+  transition: background 0.2s;
+}
+
+.record-item:first-of-type { border-radius: 10px 10px 0 0; }
+.record-item:last-of-type {
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  border-radius: 0 0 10px 10px;
+}
+.record-item:only-of-type { border-radius: 10px; }
+
+.record-item:hover {
+  background: rgba(245,200,66,0.04);
+}
+
+.record-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.record-category {
+  font-size: 14px;
+  color: #e8e8f0;
+  margin-bottom: 2px;
+}
+
+.record-note {
+  font-size: 12px;
+  color: #666;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.record-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.record-type-tag {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.record-type-tag.income { background: rgba(74,222,128,0.15); color: #4ade80; }
+.record-type-tag.expense { background: rgba(248,113,113,0.15); color: #f87171; }
+.record-type-tag.transfer { background: rgba(150,150,170,0.15); color: #9696aa; }
+
+.record-account {
+  font-size: 12px;
+  color: #888;
+}
+
+.record-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.record-amount {
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 15px;
+  font-weight: 500;
+  min-width: 90px;
+  text-align: right;
+}
+
+.record-amount.income { color: #4ade80; }
+.record-amount.expense { color: #f87171; }
+.record-amount.transfer { color: #9696aa; }
+
+.record-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.record-item:hover .record-actions { opacity: 1; }
+
+.record-action-btn {
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: rgba(255,255,255,0.06);
+  color: #888;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.record-action-btn:hover { background: rgba(245,200,66,0.2); color: #f5c842; }
+.record-action-btn.danger:hover { background: rgba(248,113,113,0.2); color: #f87171; }
+
+.record-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: #666;
+  font-size: 14px;
+}
+
+/* ---- 财务弹窗 ---- */
+
+.finance-modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+
+.finance-modal {
+  background: #1a1a2e;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  width: 90%;
+  max-width: 480px;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  animation: modalIn 0.25s ease;
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.finance-modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.finance-modal-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: #e8e8f0;
+}
+
+.finance-modal-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: #888;
+  font-size: 18px;
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.finance-modal-close:hover { background: rgba(255,255,255,0.08); color: #e8e8f0; }
+
+.finance-modal-body {
+  padding: 20px 24px;
+}
+
+.finance-form-group {
+  margin-bottom: 16px;
+}
+
+.finance-form-label {
+  display: block;
+  font-size: 13px;
+  color: #aaa;
+  margin-bottom: 6px;
+}
+
+.finance-form-input,
+.finance-form-select,
+.finance-form-textarea {
+  width: 100%;
+  padding: 9px 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  color: #e8e8f0;
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.finance-form-input:focus,
+.finance-form-select:focus,
+.finance-form-textarea:focus {
+  outline: none;
+  border-color: #f5c842;
+}
+
+.finance-form-textarea {
+  resize: vertical;
+  min-height: 70px;
+}
+
+.finance-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.finance-modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.finance-btn {
+  padding: 8px 18px;
+  border-radius: 7px;
+  font-size: 13px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.finance-btn.primary {
+  background: #f5c842;
+  color: #1a1a2e;
+  border-color: #f5c842;
+  font-weight: 500;
+}
+.finance-btn.primary:hover { background: #f8d56a; }
+
+.finance-btn.ghost {
+  background: transparent;
+  color: #aaa;
+  border-color: rgba(255,255,255,0.1);
+}
+.finance-btn.ghost:hover { color: #e8e8f0; border-color: rgba(255,255,255,0.2); }
+
+.finance-btn.danger {
+  background: rgba(248,113,113,0.15);
+  color: #f87171;
+  border-color: rgba(248,113,113,0.3);
+}
+.finance-btn.danger:hover { background: rgba(248,113,113,0.25); }
+
+/* ---- 分区占位 ---- */
+
+.section-placeholder {
+  background: #1a1a2e;
+  border: 1px dashed rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 60px 20px;
+  text-align: center;
+  color: #666;
+}
+
+.section-placeholder-icon {
+  font-size: 40px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.section-placeholder-text {
+  font-size: 14px;
+  color: #888;
+}
+
+/* ---- Loading ---- */
+
+.finance-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.finance-loading::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,0.1);
+  border-top-color: #f5c842;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 10px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---- 响应式 ---- */
+
+@media (max-width: 1200px) {
+  .overview-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
+  .finance-page { padding: 16px; }
+  .overview-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .overview-grid .stat-card { padding: 14px; }
+  .stat-value { font-size: 18px; }
+  .chart-section { grid-template-columns: 1fr; }
+  .record-summary { grid-template-columns: 1fr; gap: 8px; }
+  .finance-tabs { overflow-x: auto; flex-wrap: nowrap; }
+  .finance-tab { flex-shrink: 0; white-space: nowrap; }
+}
+</style>
 </head>
 <body>
   <div id="root"></div>
@@ -174,6 +984,21 @@ function parseVersionHistory(text) {
   });
 }
 
+// 飞书单选字段取值工具函数
+// 飞书单选字段返回对象数组 [{text: "值"}] 或 [{name: "值"}]，多选同理
+// 该函数统一处理：字符串直接返回，数组取第一个元素的 text/name，其他返回空字符串
+function getFieldValue(fieldValue) {
+  if (!fieldValue) return '';
+  if (typeof fieldValue === 'string') return fieldValue;
+  if (Array.isArray(fieldValue)) {
+    const first = fieldValue[0];
+    if (!first) return '';
+    if (typeof first === 'string') return first;
+    return first.text || first.name || '';
+  }
+  return '';
+}
+
 function calcStatusStats(records) {
   const stats = {
     total: records.length, todo: 0, doing: 0, done: 0,
@@ -185,7 +1010,7 @@ function calcStatusStats(records) {
   threeDaysLater.setDate(today.getDate() + 3);
 
   records.forEach(r => {
-    const status = r.fields['任务状态'];
+    const status = getFieldValue(r.fields['任务状态']);
     const dueText = r.fields['截止时间'];
     let dueDate = null;
     if (dueText) {
@@ -212,10 +1037,15 @@ function calcStatusStats(records) {
   return stats;
 }
 
+// 获取记录的所属模块
+function getRecordModule(record) {
+  return getFieldValue(record.fields['所属模块']) || '未分类';
+}
+
 function groupByModule(records) {
   const groups = {};
   records.forEach(r => {
-    const module = r.fields['所属模块'] || '未分类';
+    const module = getRecordModule(r);
     if (!groups[module]) groups[module] = [];
     groups[module].push(r);
   });
@@ -235,20 +1065,50 @@ const FEISHU_LINK_TABLE_ID = 'tblmJxq9iOtGLmDz';
 const FEISHU_MODULE_TABLE_ID = 'tblo2A5lbJxcP7Jx';
 const FEISHU_BASE = 'https://open.feishu.cn/open-apis';
 
-// 飞书 API 代理（Cloudflare Workers）
-const FEISHU_PROXY = 'https://feishu-proxy.brhwkpv7d5.workers.dev';
+// 飞书 API 代理
+const FEISHU_PROXY = 'https://d78rws3qxj.coze.site/api/feishu';
+
+// 财务模块配置
+const FINANCE_CONFIG = {
+  appToken: 'ZGcrbdAztars3CsTFtAcUciLn9e',
+  tables: {
+    ledger: 'tblDX2yQseShTfkE',    // 记账表
+    assets: 'tblMLfwcwJqc09Mi',     // 资产库表
+    income: 'tbl3L1H2yaId4ZVU',     // 收入表
+    loans: 'tbltMkfyPM3x0WdU',      // 贷款负债表
+    reminders: 'tblvobprvhfEw6qr',  // 财务提醒表
+  }
+};
+
+// 加载财务模块所有数据
+async function fetchAllFinanceData() {
+  const [ledger, assets, income, loans, reminders] = await Promise.all([
+    searchRecordsByTable(FINANCE_CONFIG.appToken, FINANCE_CONFIG.tables.ledger, {}),
+    searchRecordsByTable(FINANCE_CONFIG.appToken, FINANCE_CONFIG.tables.assets, {}),
+    searchRecordsByTable(FINANCE_CONFIG.appToken, FINANCE_CONFIG.tables.income, {}),
+    searchRecordsByTable(FINANCE_CONFIG.appToken, FINANCE_CONFIG.tables.loans, {}),
+    searchRecordsByTable(FINANCE_CONFIG.appToken, FINANCE_CONFIG.tables.reminders, {}),
+  ]);
+  return { ledger, assets, income, loans, reminders };
+}
 
 async function proxyFetch(targetUrl, options = {}) {
   // 将飞书地址转换为代理地址
-  const path = targetUrl.replace('https://open.feishu.cn', '');
-  const url = FEISHU_PROXY + path;
+  // 原地址：https://open.feishu.cn/open-apis/bitable/v1/...
+  // 目标：https://d78rws3qxj.coze.site/api/feishu/bitable/v1/...
+  const feishuPath = targetUrl.replace('https://open.feishu.cn/open-apis', '');
+  const url = FEISHU_PROXY + feishuPath;
   
-  // 最多重试 3 次（应对 Worker 冷启动 / 网络抖动）
+  // 写操作（POST/PUT/DELETE）只重试 1 次，避免重复执行；GET 请求重试 3 次
+  const method = (options.method || 'GET').toUpperCase();
+  const isWriteOp = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method);
+  const maxRetries = isWriteOp ? 1 : 3;
+  
   let lastError = null;
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < maxRetries; i++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超时
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
       const res = await fetch(url, {
         ...options,
         signal: controller.signal,
@@ -257,13 +1117,27 @@ async function proxyFetch(targetUrl, options = {}) {
       return res;
     } catch (e) {
       lastError = e;
-      console.warn(`代理请求第 ${i+1} 次失败:`, e.message);
-      if (i < 2) {
+      const errorType = e.name === 'AbortError' ? '超时' : '网络错误';
+      console.warn(`代理请求第 ${i+1}/${maxRetries} 次失败 (${errorType}):`, e.message, 'URL:', url);
+      
+      // 写操作失败时不重试，直接抛出
+      if (isWriteOp) {
+        const hint = e.name === 'AbortError' 
+          ? '请求超时，请检查网络连接后重试' 
+          : '网络请求失败，请检查网络连接或稍后重试';
+        throw new Error(`${hint} (${e.message || errorType})`);
+      }
+      
+      // GET 请求才进行重试
+      if (i < maxRetries - 1) {
         await new Promise(r => setTimeout(r, 500 * (i + 1))); // 递增等待
       }
     }
   }
-  throw lastError || new Error('代理请求失败');
+  
+  // GET 请求所有重试都失败
+  const errorType = lastError?.name === 'AbortError' ? '请求超时' : '网络请求失败';
+  throw new Error(`${errorType}，请检查网络连接后重试 (${lastError?.message || '未知错误'})`);
 }
 
 // 从 localStorage 读取配置（用户可自定义密钥）
@@ -282,43 +1156,12 @@ function getConfig() {
   };
 }
 
-// token 缓存
-let cachedToken = null;
-let tokenExpireTime = 0;
-
-async function getAccessToken() {
-  const config = getConfig();
-  const now = Date.now();
-  if (cachedToken && now < tokenExpireTime - 60000) {
-    return cachedToken;
-  }
-
-  const targetUrl = `${FEISHU_BASE}/auth/v3/tenant_access_token/internal`;
-  const res = await proxyFetch(targetUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      app_id: config.appId,
-      app_secret: config.appSecret,
-    }),
-  });
-  const data = await res.json();
-  if (data.code !== 0) {
-    throw new Error(data.msg || '获取token失败，请检查飞书应用配置');
-  }
-  cachedToken = data.tenant_access_token;
-  tokenExpireTime = now + data.expire * 1000;
-  return cachedToken;
-}
-
 async function feishuRequest(path, options = {}) {
-  const token = await getAccessToken();
   const targetUrl = `${FEISHU_BASE}${path}`;
   const res = await proxyFetch(targetUrl, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
       ...options.headers,
     },
   });
@@ -329,7 +1172,70 @@ async function feishuRequest(path, options = {}) {
   return data.data;
 }
 
-// 获取所有任务记录（自动翻页）
+// 统一清洗飞书字段：将所有富文本数组转成纯文本字符串
+// 避免组件层漏调用 getFieldValue 导致 React #31 渲染错误
+function cleanFields(fields) {
+  const cleaned = {};
+  for (const key in fields) {
+    const val = fields[key];
+    // 多选字段：元素是字符串，保留数组
+    if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'string') {
+      cleaned[key] = val;
+    }
+    // 其他情况（富文本对象数组、纯字符串、数字等）统一走 getFieldValue
+    else {
+      cleaned[key] = getFieldValue(val);
+    }
+  }
+  return cleaned;
+}
+
+// 通用函数：按 table_id 获取飞书多维表格记录（自动翻页）
+async function searchRecordsByTable(appToken, tableId) {
+  const allItems = [];
+  let pageToken = '';
+  let hasMore = true;
+
+  while (hasMore) {
+    const url = `/bitable/v1/apps/${appToken}/tables/${tableId}/records/search`;
+    const body = { page_size: 500 };
+    if (pageToken) body.page_token = pageToken;
+
+    const data = await feishuRequest(url, { method: 'POST', body: JSON.stringify(body) });
+    allItems.push(...(data.items || []));
+    hasMore = data.has_more;
+    pageToken = data.page_token || '';
+  }
+
+  return allItems.map(item => ({ ...item, fields: cleanFields(item.fields) }));
+}
+
+// 财务模块配置
+const FINANCE_CONFIG = {
+  appToken: 'ZGcrbdAztars3CsTFtAcUciLn9e',
+  tables: {
+    ledger: 'tblDX2yQseShTfkE',      // 记账表
+    assets: 'tblMLfwcwJqc09Mi',       // 资产库表
+    income: 'tbl3L1H2yaId4ZVU',       // 收入表
+    loans: 'tbltMkfyPM3x0WdU',        // 贷款负债表
+    reminders: 'tblvobprvhfEw6qr',    // 财务提醒表
+  }
+};
+
+// 获取所有财务数据
+async function fetchAllFinanceData() {
+  const { appToken, tables } = FINANCE_CONFIG;
+  const [ledger, assets, income, loans, reminders] = await Promise.all([
+    searchRecordsByTable(appToken, tables.ledger),
+    searchRecordsByTable(appToken, tables.assets),
+    searchRecordsByTable(appToken, tables.income),
+    searchRecordsByTable(appToken, tables.loans),
+    searchRecordsByTable(appToken, tables.reminders),
+  ]);
+  return { ledger, assets, income, loans, reminders };
+}
+
+// 获取所有任务记录（使用 POST search 接口，自动翻页）
 async function getAllRecords() {
   const config = getConfig();
   const allItems = [];
@@ -337,16 +1243,18 @@ async function getAllRecords() {
   let hasMore = true;
 
   while (hasMore) {
-    let url = `/bitable/v1/apps/${config.appToken}/tables/${config.tableId}/records?page_size=500`;
-    if (pageToken) url += `&page_token=${pageToken}`;
+    const url = `/bitable/v1/apps/${config.appToken}/tables/${config.tableId}/records/search`;
+    const body = { page_size: 500 };
+    if (pageToken) body.page_token = pageToken;
 
-    const data = await feishuRequest(url);
+    const data = await feishuRequest(url, { method: 'POST', body: JSON.stringify(body) });
     allItems.push(...(data.items || []));
     hasMore = data.has_more;
     pageToken = data.page_token;
   }
 
-  return allItems;
+  // 统一清洗所有字段值（富文本 → 纯文本），组件层直接安全使用
+  return allItems.map(item => ({ ...item, fields: cleanFields(item.fields) }));
 }
 
 // 创建记录
@@ -396,22 +1304,24 @@ async function deleteRecord(recordId) {
   return data;
 }
 
-// 获取业务模块列表
+// 获取业务模块列表（使用 POST search 接口）
 async function getModules() {
   const config = getConfig();
   const data = await feishuRequest(
-    `/bitable/v1/apps/${config.appToken}/tables/${config.moduleTableId}/records?page_size=200`
+    `/bitable/v1/apps/${config.appToken}/tables/${config.moduleTableId}/records/search`,
+    { method: 'POST', body: JSON.stringify({ page_size: 200 }) }
   );
   const items = (data.items || [])
     .map(item => ({
       record_id: item.record_id,
-      key: item.fields['模块名称'] || '',
-      icon: item.fields['图标'] || '📁',
-      color: item.fields['主题色'] || 'blue',
-      path: '/' + (item.fields['路径标识'] || ''),
-      pathKey: item.fields['路径标识'] || '',
+      key: getFieldValue(item.fields['模块名称']) || '',
+      icon: getFieldValue(item.fields['图标']) || '📁',
+      color: getFieldValue(item.fields['主题色']) || 'blue',
+      path: '/' + (getFieldValue(item.fields['路径标识']) || ''),
+      pathKey: getFieldValue(item.fields['路径标识']) || '',
       sort: item.fields['排序'] || 99,
-      description: item.fields['描述'] || '',
+      description: getFieldValue(item.fields['描述']) || '',
+      hidden: getFieldValue(item.fields['隐藏状态']) === '隐藏',
     }))
     .sort((a, b) => a.sort - b.sort);
   return items;
@@ -453,16 +1363,17 @@ async function deleteModule(recordId) {
   return data;
 }
 
-// 获取外部链接
+// 获取外部链接（使用 POST search 接口）
 async function getLinks() {
   const config = getConfig();
   const data = await feishuRequest(
-    `/bitable/v1/apps/${config.appToken}/tables/${config.linkTableId}/records?page_size=200`
+    `/bitable/v1/apps/${config.appToken}/tables/${config.linkTableId}/records/search`,
+    { method: 'POST', body: JSON.stringify({ page_size: 200 }) }
   );
   const items = (data.items || [])
     .map(item => ({
       recordId: item.record_id,
-      ...item.fields,
+      ...cleanFields(item.fields),
     }))
     .sort((a, b) => (a['排序'] || 99) - (b['排序'] || 99));
   return items;
@@ -528,6 +1439,7 @@ function Sidebar({ onLock, modules, onModulesChange }) {
   const { path: locationPath } = useHashRoute();
   const location = { pathname: locationPath };
   const [unlocked, setUnlocked] = useState(isUnlocked());
+  const [showPwd, setShowPwd] = useState(false);
 
   useEffect(() => {
     const check = () => setUnlocked(isUnlocked());
@@ -540,6 +1452,10 @@ function Sidebar({ onLock, modules, onModulesChange }) {
     setUnlocked(false);
     if (onLock) onLock();
   };
+
+  // 根据解锁状态过滤模块
+  const visibleModules = unlocked ? modules : modules.filter(m => !m.hidden);
+  const hasHiddenModules = modules.some(m => m.hidden);
 
   return (
     <aside className="sidebar">
@@ -561,12 +1477,21 @@ function Sidebar({ onLock, modules, onModulesChange }) {
           <span>业务模块</span>
         </div>
 
-        {modules.map(m => (
+        {visibleModules.map(m => (
           <NavLink key={m.key} to={m.path} className="nav-item">
             <span className="nav-icon">{m.icon}</span>
-            <span className="nav-text">{m.key}</span>
+            <span className="nav-text">
+              {m.key}
+              {m.hidden && <span className="nav-lock-icon">🔒</span>}
+            </span>
           </NavLink>
         ))}
+        {hasHiddenModules && !unlocked && (
+          <div className="nav-item nav-hidden-trigger" onClick={() => setShowPwd(true)}>
+            <span className="nav-icon">🔒</span>
+            <span className="nav-text">显示隐藏模块</span>
+          </div>
+        )}
         <div className="nav-item nav-manage-btn" onClick={() => window.location.hash = '/module-manage'}>
           <span className="nav-icon">⚙️</span>
           <span className="nav-text">模块管理</span>
@@ -581,7 +1506,487 @@ function Sidebar({ onLock, modules, onModulesChange }) {
           {unlocked ? '点击锁定隐私数据' : '输入密码解锁隐藏数据'}
         </div>
       </div>
+
+      {showPwd && <PasswordModal onClose={() => setShowPwd(false)} onSuccess={() => { setUnlocked(true); setShowPwd(false); }} />}
     </aside>
+  );
+}
+
+/* ==========================================================
+   组件：财务模块
+   ========================================================== */
+
+function FinancePage() {
+  const [activeTab, setActiveTab] = useState('overview');
+  const [data, setData] = useState({ ledger: [], assets: [], income: [], loans: [], reminders: [] });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  // 记账分区状态
+  const [ledgerFilter, setLedgerFilter] = useState('all'); // all/income/expense/transfer
+  const [ledgerMonth, setLedgerMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [showLedgerModal, setShowLedgerModal] = useState(false);
+  const [editingLedger, setEditingLedger] = useState(null);
+
+  // 加载财务数据
+  const loadData = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const result = await fetchAllFinanceData();
+      setData(result);
+    } catch (e) {
+      setError('加载财务数据失败：' + e.message);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadData(); }, []);
+
+  // 切换月份
+  const changeMonth = (delta) => {
+    const [y, m] = ledgerMonth.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    setLedgerMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  };
+
+  // 筛选记账记录
+  const filteredLedger = data.ledger.filter(r => {
+    if (ledgerFilter !== 'all' && r.fields['收支类型'] !== ledgerFilter) return false;
+    if (r.fields['记录日期']) {
+      const d = new Date(r.fields['记录日期']);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (ym !== ledgerMonth) return false;
+    }
+    return true;
+  });
+
+  // 按日期分组
+  const groupedLedger = filteredLedger.reduce((acc, r) => {
+    const date = r.fields['记录日期'] ? formatDate(r.fields['记录日期']) : '未知日期';
+    if (!acc[date]) acc[date] = [];
+    acc[date].push(r);
+    return acc;
+  }, {});
+
+  // 统计
+  const monthStats = data.ledger.reduce((acc, r) => {
+    if (!r.fields['记录日期']) return acc;
+    const d = new Date(r.fields['记录日期']);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    if (ym !== ledgerMonth) return acc;
+    const amount = r.fields['金额'] || 0;
+    const type = r.fields['收支类型'];
+    if (type === '收入') acc.income += amount;
+    else if (type === '支出') acc.expense += amount;
+    return acc;
+  }, { income: 0, expense: 0 });
+  monthStats.balance = monthStats.income - monthStats.expense;
+
+  // 总览数据
+  const overviewData = {
+    netAssets: data.assets.reduce((sum, r) => sum + (r.fields['当前估值'] || 0), 0) 
+               - data.loans.reduce((sum, r) => sum + ((r.fields['贷款总额'] || 0) - (r.fields['已还本金'] || 0)), 0),
+    monthIncome: monthStats.income,
+    monthExpense: monthStats.expense,
+    monthBalance: monthStats.balance,
+  };
+
+  // 支出分类统计
+  const expenseByCategory = data.ledger.reduce((acc, r) => {
+    if (!r.fields['记录日期']) return acc;
+    const d = new Date(r.fields['记录日期']);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    if (ym !== ledgerMonth || r.fields['收支类型'] !== '支出') return acc;
+    const cat = r.fields['分类'] || '其他';
+    acc[cat] = (acc[cat] || 0) + (r.fields['金额'] || 0);
+    return acc;
+  }, {});
+
+  // 收入分类统计
+  const incomeByCategory = data.ledger.reduce((acc, r) => {
+    if (!r.fields['记录日期']) return acc;
+    const d = new Date(r.fields['记录日期']);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    if (ym !== ledgerMonth || r.fields['收支类型'] !== '收入') return acc;
+    const cat = r.fields['分类'] || '其他';
+    acc[cat] = (acc[cat] || 0) + (r.fields['金额'] || 0);
+    return acc;
+  }, {});
+
+  // 提醒列表（按日期升序，取前5条）
+  const upcomingReminders = data.reminders
+    .filter(r => r.fields['状态'] === '启用')
+    .sort((a, b) => (a.fields['下次提醒日期'] || 0) - (b.fields['下次提醒日期'] || 0))
+    .slice(0, 5);
+
+  // 进行中的贷款
+  const activeLoans = data.loans.filter(r => r.fields['状态'] === '正常');
+
+  // 删除记账记录
+  const handleDeleteLedger = async (record) => {
+    if (!confirm('确定删除这条记录？')) return;
+    try {
+      await deleteRecord(FINANCE_CONFIG.appToken, FINANCE_CONFIG.tables.ledger, record.record_id);
+      loadData();
+    } catch (e) {
+      alert('删除失败：' + e.message);
+    }
+  };
+
+  // 保存记账记录
+  const handleSaveLedger = async (formData) => {
+    try {
+      if (editingLedger) {
+        await updateRecord(FINANCE_CONFIG.appToken, FINANCE_CONFIG.tables.ledger, editingLedger.record_id, formData);
+      } else {
+        await createRecord(FINANCE_CONFIG.appToken, FINANCE_CONFIG.tables.ledger, formData);
+      }
+      setShowLedgerModal(false);
+      setEditingLedger(null);
+      loadData();
+    } catch (e) {
+      alert('保存失败：' + e.message);
+    }
+  };
+
+  // 饼图颜色
+  const PIE_COLORS = ['#e94560', '#f5a623', '#4ecdc4', '#9b59b6', '#3498db', '#1abc9c', '#e67e22', '#95a5a6'];
+
+  // 渲染饼图
+  const renderPieChart = (data, title) => {
+    const entries = Object.entries(data);
+    const total = entries.reduce((sum, [, v]) => sum + v, 0);
+    if (total === 0) return <div className="pie-chart-empty">暂无数据</div>;
+    
+    let gradient = '';
+    let cumulative = 0;
+    entries.forEach(([_, value], i) => {
+      const percent = (value / total) * 100;
+      const color = PIE_COLORS[i % PIE_COLORS.length];
+      gradient += `${color} ${cumulative}% ${cumulative + percent}%`;
+      cumulative += percent;
+      if (i < entries.length - 1) gradient += ', ';
+    });
+
+    return (
+      <div className="pie-chart-container">
+        <div className="pie-chart" style={{ background: `conic-gradient(${gradient})` }} />
+        <div className="pie-chart-legend">
+          {entries.map(([name, value], i) => (
+            <div key={name} className="legend-item">
+              <span className="legend-color" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
+              <span className="legend-name">{name}</span>
+              <span className="legend-value">¥{value.toLocaleString()}</span>
+              <span className="legend-percent">{((value / total) * 100).toFixed(1)}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  if (loading) return <div className="page-loading"><div className="loading-spinner" />加载财务数据中...</div>;
+  if (error) return <div className="page-error">{error}<button onClick={loadData}>重试</button></div>;
+
+  const tabs = [
+    { key: 'overview', label: '总览', icon: '📊' },
+    { key: 'ledger', label: '记账', icon: '💰' },
+    { key: 'assets', label: '资产库', icon: '🏠' },
+    { key: 'income', label: '收入', icon: '💵' },
+    { key: 'loans', label: '贷负', icon: '🏦' },
+    { key: 'reminders', label: '提醒', icon: '🔔' },
+  ];
+
+  return (
+    <div className="finance-page">
+      <div className="finance-tabs">
+        {tabs.map(tab => (
+          <button 
+            key={tab.key} 
+            className={`finance-tab ${activeTab === tab.key ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab.key)}
+          >
+            <span className="tab-icon">{tab.icon}</span>
+            <span className="tab-label">{tab.label}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="finance-content">
+        {/* 总览分区 */}
+        {activeTab === 'overview' && (
+          <div className="overview-section">
+            <div className="overview-grid">
+              <div className="stat-card stat-net">
+                <div className="stat-label">净资产</div>
+                <div className="stat-value">¥{overviewData.netAssets.toLocaleString()}</div>
+              </div>
+              <div className="stat-card stat-income">
+                <div className="stat-label">本月收入</div>
+                <div className="stat-value">¥{overviewData.monthIncome.toLocaleString()}</div>
+              </div>
+              <div className="stat-card stat-expense">
+                <div className="stat-label">本月支出</div>
+                <div className="stat-value">¥{overviewData.monthExpense.toLocaleString()}</div>
+              </div>
+              <div className="stat-card stat-balance">
+                <div className="stat-label">本月结余</div>
+                <div className="stat-value">¥{overviewData.monthBalance.toLocaleString()}</div>
+              </div>
+            </div>
+
+            <div className="chart-section">
+              <div className="chart-card">
+                <h3>本月支出构成</h3>
+                {renderPieChart(expenseByCategory, '支出')}
+              </div>
+              <div className="chart-card">
+                <h3>本月收入构成</h3>
+                {renderPieChart(incomeByCategory, '收入')}
+              </div>
+            </div>
+
+            <div className="reminder-section">
+              <h3>近期提醒</h3>
+              {upcomingReminders.length === 0 ? (
+                <div className="empty-state">暂无待处理提醒</div>
+              ) : (
+                <div className="reminder-list">
+                  {upcomingReminders.map(r => (
+                    <div key={r.record_id} className="reminder-item">
+                      <span className="reminder-type">{r.fields['提醒类型']}</span>
+                      <span className="reminder-title">{r.fields['提醒标题']}</span>
+                      <span className="reminder-amount">¥{(r.fields['金额'] || 0).toLocaleString()}</span>
+                      <span className="reminder-date">{r.fields['下次提醒日期'] ? formatDate(r.fields['下次提醒日期']) : '-'}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="loan-section">
+              <h3>贷款进度</h3>
+              {activeLoans.length === 0 ? (
+                <div className="empty-state">暂无进行中的贷款</div>
+              ) : (
+                <div className="loan-progress-list">
+                  {activeLoans.map(r => {
+                    const total = r.fields['贷款总额'] || 0;
+                    const paid = r.fields['已还本金'] || 0;
+                    const remaining = total - paid;
+                    const percent = total > 0 ? (paid / total * 100) : 0;
+                    const periods = r.fields['总期数'] || 0;
+                    const paidPeriods = r.fields['已还期数'] || 0;
+                    return (
+                      <div key={r.record_id} className="loan-card">
+                        <div className="loan-name">{r.fields['贷款名称']}</div>
+                        <div className="loan-progress-bar">
+                          <div className="loan-progress-fill" style={{ width: `${percent}%` }} />
+                        </div>
+                        <div className="loan-info">
+                          <span>已还 {paidPeriods}/{periods} 期</span>
+                          <span>剩余 ¥{remaining.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* 记账分区 */}
+        {activeTab === 'ledger' && (
+          <div className="ledger-section">
+            <div className="ledger-toolbar">
+              <div className="ledger-filter">
+                {['all', '收入', '支出', '转账'].map(type => (
+                  <button 
+                    key={type} 
+                    className={`filter-btn ${ledgerFilter === type ? 'active' : ''}`}
+                    onClick={() => setLedgerFilter(type)}
+                  >
+                    {type === 'all' ? '全部' : type}
+                  </button>
+                ))}
+              </div>
+              <div className="ledger-month">
+                <button onClick={() => changeMonth(-1)}>◀</button>
+                <span>{ledgerMonth}</span>
+                <button onClick={() => changeMonth(1)}>▶</button>
+              </div>
+              <button className="btn-primary" onClick={() => { setEditingLedger(null); setShowLedgerModal(true); }}>
+                + 新增记录
+              </button>
+            </div>
+
+            <div className="ledger-stats">
+              <div className="ledger-stat">
+                <span className="stat-label">收入</span>
+                <span className="stat-value income">¥{monthStats.income.toLocaleString()}</span>
+              </div>
+              <div className="ledger-stat">
+                <span className="stat-label">支出</span>
+                <span className="stat-value expense">¥{monthStats.expense.toLocaleString()}</span>
+              </div>
+              <div className="ledger-stat">
+                <span className="stat-label">结余</span>
+                <span className="stat-value balance">¥{monthStats.balance.toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div className="record-list">
+              {Object.keys(groupedLedger).length === 0 ? (
+                <div className="empty-state">本月暂无记录</div>
+              ) : (
+                Object.entries(groupedLedger).map(([date, records]) => (
+                  <div key={date} className="record-date-group">
+                    <div className="date-header">{date}</div>
+                    {records.map(r => {
+                      const type = r.fields['收支类型'];
+                      const amount = r.fields['金额'] || 0;
+                      const typeClass = type === '收入' ? 'income' : type === '支出' ? 'expense' : 'transfer';
+                      const sign = type === '收入' ? '+' : type === '支出' ? '-' : '';
+                      return (
+                        <div key={r.record_id} className="record-item">
+                          <div className="record-left">
+                            <span className="record-category">{r.fields['分类'] || '未分类'}</span>
+                            {r.fields['备注'] && <span className="record-note">{r.fields['备注']}</span>}
+                          </div>
+                          <div className="record-center">
+                            <span className={`record-type-tag ${typeClass}`}>{type || '未设置'}</span>
+                          </div>
+                          <div className="record-right">
+                            <span className={`record-amount ${typeClass}`}>{sign}¥{amount.toLocaleString()}</span>
+                            <div className="record-actions">
+                              <button className="action-btn" onClick={() => { setEditingLedger(r); setShowLedgerModal(true); }}>✏️</button>
+                              <button className="action-btn action-danger" onClick={() => handleDeleteLedger(r)}>🗑</button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* 其他分区占位 */}
+        {['assets', 'income', 'loans', 'reminders'].includes(activeTab) && (
+          <div className="placeholder-section">
+            <div className="placeholder-card">
+              <span className="placeholder-icon">🚧</span>
+              <h3>开发中</h3>
+              <p>此分区正在开发中，敬请期待...</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 记账弹窗 */}
+      {showLedgerModal && (
+        <LedgerModal
+          record={editingLedger}
+          onSave={handleSaveLedger}
+          onClose={() => { setShowLedgerModal(false); setEditingLedger(null); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// 记账弹窗组件
+function LedgerModal({ record, onSave, onClose }) {
+  const [formData, setFormData] = useState(() => {
+    if (record) {
+      return {
+        '记录日期': record.fields['记录日期'] ? new Date(record.fields['记录日期']).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        '收支类型': record.fields['收支类型'] || '支出',
+        '分类': record.fields['分类'] || '',
+        '金额': record.fields['金额'] || '',
+        '关联账户': record.fields['关联账户'] || '',
+        '备注': record.fields['备注'] || '',
+        '关联贷款': record.fields['关联贷款'] || '',
+        '关联资产': record.fields['关联资产'] || '',
+      };
+    }
+    return {
+      '记录日期': new Date().toISOString().split('T')[0],
+      '收支类型': '支出',
+      '分类': '',
+      '金额': '',
+      '关联账户': '',
+      '备注': '',
+      '关联贷款': '',
+      '关联资产': '',
+    };
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const data = {
+      '记录日期': new Date(formData['记录日期']).getTime(),
+      '收支类型': formData['收支类型'],
+      '分类': formData['分类'],
+      '金额': parseFloat(formData['金额']) || 0,
+      '关联账户': formData['关联账户'],
+      '备注': formData['备注'],
+      '关联贷款': formData['关联贷款'],
+      '关联资产': formData['关联资产'],
+    };
+    onSave(data);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="finance-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>{record ? '编辑记录' : '新增记录'}</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>记录日期</label>
+            <input type="date" value={formData['记录日期']} onChange={e => setFormData({...formData, '记录日期': e.target.value})} required />
+          </div>
+          <div className="form-group">
+            <label>收支类型</label>
+            <select value={formData['收支类型']} onChange={e => setFormData({...formData, '收支类型': e.target.value, '分类': ''})}>
+              <option value="支出">支出</option>
+              <option value="收入">收入</option>
+              <option value="转账">转账</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label>分类</label>
+            <input type="text" value={formData['分类']} onChange={e => setFormData({...formData, '分类': e.target.value})} placeholder="如：餐饮、交通、工资..." />
+          </div>
+          <div className="form-group">
+            <label>金额</label>
+            <input type="number" step="0.01" value={formData['金额']} onChange={e => setFormData({...formData, '金额': e.target.value})} required />
+          </div>
+          <div className="form-group">
+            <label>关联账户</label>
+            <input type="text" value={formData['关联账户']} onChange={e => setFormData({...formData, '关联账户': e.target.value})} placeholder="如：支付宝、银行卡..." />
+          </div>
+          <div className="form-group">
+            <label>备注</label>
+            <textarea value={formData['备注']} onChange={e => setFormData({...formData, '备注': e.target.value})} rows="2" />
+          </div>
+          <div className="form-actions">
+            <button type="button" className="btn-secondary" onClick={onClose}>取消</button>
+            <button type="submit" className="btn-primary">保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 
@@ -589,7 +1994,7 @@ function Sidebar({ onLock, modules, onModulesChange }) {
    组件：子页面通用模板
    ========================================================== */
 
-function ModulePage({ moduleName, icon, color }) {
+function ModulePage({ moduleName, icon, color, moduleHidden }) {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -602,16 +2007,31 @@ function ModulePage({ moduleName, icon, color }) {
   const [filters, setFilters] = useState({
     status: '', priority: '', search: '', showArchived: false,
   });
+  const [viewMode, setViewMode] = useState(() => {
+    return localStorage.getItem('oc_view_mode') || 'card';
+  });
+
+  const handleViewChange = (mode) => {
+    setViewMode(mode);
+    localStorage.setItem('oc_view_mode', mode);
+  };
+
+  // 检查模块是否隐藏且未解锁
+  const isModuleLocked = moduleHidden && !unlocked;
 
   useEffect(() => {
-    loadRecords();
-  }, [moduleName]);
+    if (!isModuleLocked) {
+      loadRecords();
+    } else {
+      setLoading(false);
+    }
+  }, [moduleName, isModuleLocked]);
 
   const loadRecords = async () => {
     try {
       setLoading(true);
       const all = await getAllRecords();
-      const filtered = all.filter(r => r.fields['所属模块'] === moduleName);
+      const filtered = all.filter(r => getRecordModule(r) === moduleName);
       setRecords(filtered);
       setError('');
     } catch (err) {
@@ -625,28 +2045,28 @@ function ModulePage({ moduleName, icon, color }) {
   const visibleRecords = useMemo(() => {
     let result = [...records];
     if (!unlocked) {
-      result = result.filter(r => r.fields['隐私状态'] !== '隐藏' && r.fields['任务状态'] !== '归档');
+      result = result.filter(r => getFieldValue(r.fields['隐私状态']) !== '隐藏' && getFieldValue(r.fields['任务状态']) !== '归档');
     }
     if (!filters.showArchived) {
-      result = result.filter(r => r.fields['任务状态'] !== '归档');
+      result = result.filter(r => getFieldValue(r.fields['任务状态']) !== '归档');
     }
     if (filters.status) {
-      result = result.filter(r => r.fields['任务状态'] === filters.status);
+      result = result.filter(r => getFieldValue(r.fields['任务状态']) === filters.status);
     }
     if (filters.priority) {
-      result = result.filter(r => r.fields['优先级'] === filters.priority);
+      result = result.filter(r => getFieldValue(r.fields['优先级']) === filters.priority);
     }
     if (filters.search) {
       const keyword = filters.search.toLowerCase();
       result = result.filter(r =>
-        (r.fields['任务标题'] || '').toLowerCase().includes(keyword) ||
-        (r.fields['详细内容'] || '').toLowerCase().includes(keyword)
+        (getFieldValue(r.fields['任务标题']) || '').toLowerCase().includes(keyword) ||
+        (getFieldValue(r.fields['详细内容']) || '').toLowerCase().includes(keyword)
       );
     }
     result.sort((a, b) => {
       const statusOrder = { '进行中': 0, '待执行': 1, '搁置': 2, '已完成': 3, '归档': 4 };
-      const sA = statusOrder[a.fields['任务状态']] ?? 5;
-      const sB = statusOrder[b.fields['任务状态']] ?? 5;
+      const sA = statusOrder[getFieldValue(a.fields['任务状态'])] ?? 5;
+      const sB = statusOrder[getFieldValue(b.fields['任务状态'])] ?? 5;
       if (sA !== sB) return sA - sB;
       const aDate = Array.isArray(a.fields['截止时间']) ? a.fields['截止时间'][0] : a.fields['截止时间'] || 0;
       const bDate = Array.isArray(b.fields['截止时间']) ? b.fields['截止时间'][0] : b.fields['截止时间'] || 0;
@@ -654,16 +2074,16 @@ function ModulePage({ moduleName, icon, color }) {
       if (aDate) return -1;
       if (bDate) return 1;
       const priOrder = { '高': 0, '中': 1, '低': 2 };
-      return (priOrder[a.fields['优先级']] ?? 3) - (priOrder[b.fields['优先级']] ?? 3);
+      return (priOrder[getFieldValue(a.fields['优先级'])] ?? 3) - (priOrder[getFieldValue(b.fields['优先级'])] ?? 3);
     });
     return result;
   }, [records, filters, unlocked]);
 
   const stats = useMemo(() => {
     const count = visibleRecords.length;
-    const done = visibleRecords.filter(r => r.fields['任务状态'] === '已完成').length;
-    const doing = visibleRecords.filter(r => r.fields['任务状态'] === '进行中').length;
-    const todo = visibleRecords.filter(r => r.fields['任务状态'] === '待执行').length;
+    const done = visibleRecords.filter(r => getFieldValue(r.fields['任务状态']) === '已完成').length;
+    const doing = visibleRecords.filter(r => getFieldValue(r.fields['任务状态']) === '进行中').length;
+    const todo = visibleRecords.filter(r => getFieldValue(r.fields['任务状态']) === '待执行').length;
     return { total: count, done, doing, todo };
   }, [visibleRecords]);
 
@@ -684,7 +2104,12 @@ function ModulePage({ moduleName, icon, color }) {
 
   const openEditForm = (record) => {
     setEditingRecord(record);
-    setFormData({ ...record.fields });
+    // 将飞书返回的对象数组格式的单选字段转换为字符串
+    const fields = { ...record.fields };
+    ['任务状态', '优先级', '隐私状态', '所属模块'].forEach(key => {
+      if (fields[key]) fields[key] = getFieldValue(fields[key]);
+    });
+    setFormData(fields);
     setShowForm(true);
   };
 
@@ -693,9 +2118,9 @@ function ModulePage({ moduleName, icon, color }) {
     if (!formData['任务标题']) return;
     try {
       const versionAction = editingRecord
-        ? `修改：${editingRecord.fields['任务标题']} → ${formData['任务标题']}`
+        ? `修改：${getFieldValue(editingRecord.fields['任务标题'])} → ${formData['任务标题']}`
         : `新增：${formData['任务标题']}`;
-      const oldVersion = editingRecord?.fields['版本变更记录'] || '';
+      const oldVersion = getFieldValue(editingRecord?.fields['版本变更记录']) || '';
       const fields = {
         ...formData,
         '版本变更记录': makeVersionEntry(versionAction) + oldVersion,
@@ -713,7 +2138,7 @@ function ModulePage({ moduleName, icon, color }) {
   };
 
   const handleArchive = async (record) => {
-    const isArchived = record.fields['任务状态'] === '归档';
+    const isArchived = getFieldValue(record.fields['任务状态']) === '归档';
     if (!confirm(isArchived ? '确定从归档恢复这条任务吗？' : '确定归档这条任务吗？')) return;
     try {
       if (isArchived) {
@@ -739,16 +2164,36 @@ function ModulePage({ moduleName, icon, color }) {
 
   const handleStatusChange = async (record, newStatus) => {
     try {
-      const oldVersion = record.fields['版本变更记录'] || '';
+      const oldVersion = getFieldValue(record.fields['版本变更记录']) || '';
       await updateRecord(record.record_id, {
         '任务状态': newStatus,
-        '版本变更记录': makeVersionEntry(`状态变更：${record.fields['任务状态']} → ${newStatus}`) + oldVersion,
+        '版本变更记录': makeVersionEntry(`状态变更：${getFieldValue(record.fields['任务状态'])} → ${newStatus}`) + oldVersion,
       });
       loadRecords();
     } catch (err) {
       alert('更新失败：' + err.message);
     }
   };
+
+  // 如果模块是隐藏的且未解锁，显示提示界面
+  if (isModuleLocked) {
+    return (
+      <div className="module-page">
+        <div className="module-locked-container">
+          <div className="module-locked-icon">🔒</div>
+          <h2 className="module-locked-title">该模块已隐藏</h2>
+          <p className="module-locked-desc text-secondary">输入密码解锁后可查看此模块</p>
+          <button className="btn btn-primary" onClick={() => setShowPwd(true)}>
+            🔓 输入密码解锁
+          </button>
+          <button className="btn btn-secondary" style={{ marginTop: '12px' }} onClick={() => window.location.hash = '/'}>
+            返回首页
+          </button>
+        </div>
+        {showPwd && <PasswordModal onClose={() => setShowPwd(false)} onSuccess={() => { setUnlocked(true); setShowPwd(false); loadRecords(); }} />}
+      </div>
+    );
+  }
 
   return (
     <div className="module-page">
@@ -825,6 +2270,22 @@ function ModulePage({ moduleName, icon, color }) {
             显示归档
           </label>
         </div>
+        <div className="view-toggle">
+          <button
+            className={`view-btn ${viewMode === 'card' ? 'active' : ''}`}
+            onClick={() => handleViewChange('card')}
+            title="卡片视图"
+          >
+            ▦ 卡片
+          </button>
+          <button
+            className={`view-btn ${viewMode === 'list' ? 'active' : ''}`}
+            onClick={() => handleViewChange('list')}
+            title="列表视图"
+          >
+            ☰ 列表
+          </button>
+        </div>
         <button className="btn btn-secondary text-sm" onClick={loadRecords}>
           🔄 刷新
         </button>
@@ -839,7 +2300,7 @@ function ModulePage({ moduleName, icon, color }) {
             <div className="text-secondary mb-4">暂无任务</div>
             <button className="btn btn-primary" onClick={openAddForm}>+ 创建第一条任务</button>
           </div>
-        ) : (
+        ) : viewMode === 'card' ? (
           <div className="task-cards">
             {visibleRecords.map(record => {
               const f = record.fields;
@@ -921,12 +2382,48 @@ function ModulePage({ moduleName, icon, color }) {
               );
             })}
           </div>
+        ) : (
+          <div className="task-list-table">
+            {visibleRecords.map(record => {
+              const f = record.fields;
+              const title = getFieldValue(f['任务标题']) || '未命名';
+              const status = getFieldValue(f['任务状态']) || '未设置';
+              const priority = getFieldValue(f['优先级']) || '中';
+              const privacy = getFieldValue(f['隐私状态']);
+              const progress = f['进度占比'];
+              const dueStatus = getDueStatus(f['截止时间'], status);
+              const isHidden = privacy === '隐藏';
+              const isArchived = status === '归档';
+              return (
+                <div key={record.record_id} className={`list-row ${isHidden ? 'task-hidden' : ''} ${isArchived ? 'task-archived' : ''}`}>
+                  <div className="list-row-title">
+                    <span className="truncate">{title}</span>
+                  </div>
+                  <div className="list-row-right">
+                    <span className={`tag ${STATUS_COLORS[status] || 'tag-gray'}`}>{status}</span>
+                    <span className={`tag ${PRIORITY_COLORS[priority] || 'tag-gray'}`}>{priority}</span>
+                    <div className="list-row-progress">
+                      <div className="progress-bar-sm"><div className="progress-fill-sm" style={{ width: `${progress || 0}%`, background: `linear-gradient(90deg, var(--accent-${color}), var(--accent-purple))` }} /></div>
+                      <span className="text-xs text-muted">{progress || 0}%</span>
+                    </div>
+                    {f['截止时间'] && <span className={`text-xs due-${dueStatus}`}>📅 {formatDate(f['截止时间'])}</span>}
+                    <div className="list-row-actions">
+                      <button className="action-btn" title="查看详情" onClick={() => setViewRecord(record)}>👁</button>
+                      <button className="action-btn" title="编辑" onClick={() => openEditForm(record)}>✏️</button>
+                      <button className="action-btn" title={isArchived ? '恢复' : '归档'} onClick={() => handleArchive(record)}>{isArchived ? '↩️' : '📦'}</button>
+                      <button className="action-btn action-danger" title="删除" onClick={() => handleDelete(record)}>🗑</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
       {showPwd && (
         <PasswordModal
-          onSuccess={() => { setUnlocked(true); setShowPwd(false); }}
+          onSuccess={() => { setUnlocked(true); setShowPwd(false); loadRecords(); }}
           onClose={() => setShowPwd(false)}
         />
       )}
@@ -1049,20 +2546,20 @@ function ModulePage({ moduleName, icon, color }) {
         <div className="modal-overlay" onClick={() => setViewRecord(null)}>
           <div className="modal-content detail-modal" onClick={e => e.stopPropagation()}>
             <div className="detail-header">
-              <h2 className="detail-title">{viewRecord.fields['任务标题'] || '未命名'}</h2>
+              <h2 className="detail-title">{getFieldValue(viewRecord.fields['任务标题']) || '未命名'}</h2>
               <button className="close-btn" onClick={() => setViewRecord(null)}>✕</button>
             </div>
             <div className="detail-tags flex gap-2 flex-wrap">
-              <span className={`tag ${STATUS_COLORS[viewRecord.fields['任务状态']] || 'tag-gray'}`}>
-                {viewRecord.fields['任务状态']}
+              <span className={`tag ${STATUS_COLORS[getFieldValue(viewRecord.fields['任务状态'])] || 'tag-gray'}`}>
+                {getFieldValue(viewRecord.fields['任务状态'])}
               </span>
-              <span className={`tag ${PRIORITY_COLORS[viewRecord.fields['优先级']] || 'tag-gray'}`}>
-                {viewRecord.fields['优先级']}优先级
+              <span className={`tag ${PRIORITY_COLORS[getFieldValue(viewRecord.fields['优先级'])] || 'tag-gray'}`}>
+                {getFieldValue(viewRecord.fields['优先级'])}优先级
               </span>
               {viewRecord.fields['截止时间'] && (
                 <span className="tag tag-cyan">📅 {formatDate(viewRecord.fields['截止时间'])}</span>
               )}
-              {viewRecord.fields['隐私状态'] === '隐藏' && (
+              {getFieldValue(viewRecord.fields['隐私状态']) === '隐藏' && (
                 <span className="tag tag-purple">🔒 隐藏</span>
               )}
             </div>
@@ -1186,6 +2683,7 @@ function ModuleManagePage({ modules, onModulesChange }) {
       '路径标识': '',
       '排序': modules.length + 1,
       '描述': '',
+      '隐藏状态': '显示',
     });
     setShowForm(true);
   };
@@ -1209,19 +2707,15 @@ function ModuleManagePage({ modules, onModulesChange }) {
       '路径标识': mod.pathKey,
       '排序': mod.sort,
       '描述': mod.description,
+      '隐藏状态': mod.hidden ? '隐藏' : '显示',
     });
     setShowForm(true);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData['模块名称']) {
-      alert('请填写模块名称');
-      return;
-    }
-    // 新建时校验路径标识（自动生成，一般不会空）
-    if (!editingModule && !formData['路径标识']) {
-      alert('路径标识生成失败，请重试');
+    if (!formData['模块名称'] || (!editingModule && !formData['路径标识'])) {
+      alert(editingModule ? '请填写模块名称' : '请填写模块名称和路径标识');
       return;
     }
     try {
@@ -1308,7 +2802,7 @@ function ModuleManagePage({ modules, onModulesChange }) {
                     placeholder="英文小写，如 teaching"
                     readOnly
                     className="input-readonly"
-                    required
+                    required={!editingModule}
                   />
                   <div className="form-hint text-xs text-muted">
                     {editingModule ? '创建后不可修改，用于网址定位' : '根据模块名称自动生成，创建后不可修改'}
@@ -1354,6 +2848,19 @@ function ModuleManagePage({ modules, onModulesChange }) {
                     value={formData['排序'] || 1}
                     onChange={e => setFormData({ ...formData, '排序': Number(e.target.value) })}
                   />
+                </div>
+                <div className="form-group">
+                  <label>隐藏状态</label>
+                  <select
+                    value={formData['隐藏状态'] || '显示'}
+                    onChange={e => setFormData({ ...formData, '隐藏状态': e.target.value })}
+                  >
+                    <option value="显示">显示</option>
+                    <option value="隐藏">隐藏（需密码解锁）</option>
+                  </select>
+                  <div className="form-hint text-xs text-muted">
+                    隐藏的模块需要输入密码才能查看
+                  </div>
                 </div>
               </div>
               <div className="form-group">
@@ -1417,12 +2924,17 @@ function Dashboard({ modules }) {
 
   const visibleRecords = unlocked
     ? records
-    : records.filter(r => r.fields['隐私状态'] !== '隐藏' && r.fields['任务状态'] !== '归档');
+    : records.filter(r => getFieldValue(r.fields['隐私状态']) !== '隐藏' && getFieldValue(r.fields['任务状态']) !== '归档');
 
   const overallStats = calcStatusStats(visibleRecords);
   const moduleGroups = groupByModule(visibleRecords);
 
-  const moduleStats = modules.map(m => {
+  // 根据解锁状态过滤模块
+  const visibleModules = unlocked ? modules : modules.filter(m => !m.hidden);
+  const hiddenModules = modules.filter(m => m.hidden);
+  const hasHiddenModules = hiddenModules.length > 0;
+
+  const moduleStats = visibleModules.map(m => {
     const items = moduleGroups[m.key] || [];
     return {
       ...m,
@@ -1433,7 +2945,7 @@ function Dashboard({ modules }) {
 
   const urgentTasks = visibleRecords
     .filter(r => {
-      const status = getDueStatus(r.fields['截止时间'], r.fields['任务状态']);
+      const status = getDueStatus(r.fields['截止时间'], getFieldValue(r.fields['任务状态']));
       return status === 'overdue' || status === 'today' || status === 'near';
     })
     .sort((a, b) => {
@@ -1524,11 +3036,14 @@ function Dashboard({ modules }) {
           <h3 className="text-xl mb-4">各模块进度</h3>
           <div className="module-list">
             {moduleStats.map(m => (
-              <Link key={m.key} to={m.path} className="module-item">
+              <Link key={m.key} to={m.path} className={`module-item ${m.hidden ? 'module-hidden-item' : ''}`}>
                 <div className="module-header">
                   <div className="flex items-center gap-3">
                     <span className="module-icon">{m.icon}</span>
-                    <span className="module-name">{m.key}</span>
+                    <span className="module-name">
+                      {m.key}
+                      {m.hidden && <span className="module-lock-icon" title="隐藏模块">🔒</span>}
+                    </span>
                   </div>
                   <span className="module-count">{m.count} 项</span>
                 </div>
@@ -1549,6 +3064,20 @@ function Dashboard({ modules }) {
                 </div>
               </Link>
             ))}
+            {hasHiddenModules && !unlocked && (
+              <div className="module-item module-hidden-trigger" onClick={() => setShowPwd(true)}>
+                <div className="module-header">
+                  <div className="flex items-center gap-3">
+                    <span className="module-icon">🔒</span>
+                    <span className="module-name">已隐藏的模块</span>
+                  </div>
+                  <span className="module-count text-muted">{hiddenModules.length} 个</span>
+                </div>
+                <div className="text-xs text-muted" style={{ marginTop: '4px' }}>
+                  点击解锁查看隐藏模块
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1567,7 +3096,7 @@ function Dashboard({ modules }) {
           ) : (
             <div className="task-list">
               {urgentTasks.map(t => {
-                const dueStatus = getDueStatus(t.fields['截止时间'], t.fields['任务状态']);
+                const dueStatus = getDueStatus(t.fields['截止时间'], getFieldValue(t.fields['任务状态']));
                 const statusMap = {
                   overdue: { text: '已逾期', color: 'tag-red' },
                   today: { text: '今日到期', color: 'tag-orange' },
@@ -1578,9 +3107,9 @@ function Dashboard({ modules }) {
                   <div key={t.record_id} className="task-item">
                     <div className={`task-dot dot-${dueStatus}`}></div>
                     <div className="task-info">
-                      <div className="task-title truncate">{t.fields['任务标题'] || '未命名'}</div>
+                      <div className="task-title truncate">{getFieldValue(t.fields['任务标题']) || '未命名'}</div>
                       <div className="task-meta text-xs text-muted">
-                        {t.fields['所属模块']} · {formatDate(t.fields['截止时间'])}
+                        {getRecordModule(t)} · {formatDate(t.fields['截止时间'])}
                       </div>
                     </div>
                     <span className={`tag ${statusInfo.color}`}>{statusInfo.text}</span>
@@ -1630,9 +3159,9 @@ function Dashboard({ modules }) {
                 <div key={r.record_id} className="change-item">
                   <div className="change-dot"></div>
                   <div className="change-info">
-                    <div className="change-title truncate">{r.fields['任务标题'] || '未命名'}</div>
+                    <div className="change-title truncate">{getFieldValue(r.fields['任务标题']) || '未命名'}</div>
                     <div className="change-meta text-xs text-muted">
-                      {r.fields['任务状态']} · {r.fields['所属模块']}
+                      {getFieldValue(r.fields['任务状态'])} · {getRecordModule(r)}
                     </div>
                   </div>
                   <div className="change-time text-xs text-muted">
@@ -1704,7 +3233,10 @@ function App() {
             <Route
               key={m.key}
               path={m.path}
-              element={<ModulePage moduleName={m.key} icon={m.icon} color={m.color} />}
+              element={m.path === '/finance' 
+                ? <FinancePage />
+                : <ModulePage moduleName={m.key} icon={m.icon} color={m.color} moduleHidden={m.hidden} />
+              }
             />
           ))}
         </Routes>
@@ -1724,5 +3256,5 @@ const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(<ErrorBoundary><App /></ErrorBoundary>);
 
   </script>
-</body>
-</html>
+
+</body></html>

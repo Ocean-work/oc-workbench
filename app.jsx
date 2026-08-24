@@ -564,6 +564,14 @@ function ModulePage({ moduleName, icon, color }) {
   const [filters, setFilters] = useState({
     status: '', priority: '', search: '', showArchived: false,
   });
+  const [viewMode, setViewMode] = useState(() => {
+    return localStorage.getItem('oc_view_' + moduleName) || 'card';
+  });
+
+  const handleViewChange = (mode) => {
+    setViewMode(mode);
+    localStorage.setItem('oc_view_' + moduleName, mode);
+  };
 
   useEffect(() => {
     loadRecords();
@@ -787,6 +795,22 @@ function ModulePage({ moduleName, icon, color }) {
             显示归档
           </label>
         </div>
+        <div className="view-toggle">
+          <button
+            className={`view-btn ${viewMode === 'card' ? 'active' : ''}`}
+            onClick={() => handleViewChange('card')}
+            title="卡片视图"
+          >
+            ▦ 卡片
+          </button>
+          <button
+            className={`view-btn ${viewMode === 'list' ? 'active' : ''}`}
+            onClick={() => handleViewChange('list')}
+            title="列表视图"
+          >
+            ☰ 列表
+          </button>
+        </div>
         <button className="btn btn-secondary text-sm" onClick={loadRecords}>
           🔄 刷新
         </button>
@@ -802,6 +826,7 @@ function ModulePage({ moduleName, icon, color }) {
             <button className="btn btn-primary" onClick={openAddForm}>+ 创建第一条任务</button>
           </div>
         ) : (
+          {viewMode === 'card' ? (
           <div className="task-cards">
             {visibleRecords.map(record => {
               const f = record.fields;
@@ -880,6 +905,81 @@ function ModulePage({ moduleName, icon, color }) {
                     ))}
                   </div>
                 </div>
+          ) : (
+            <div className="task-list-table">
+              <div className="table-header">
+                <span className="col-title">任务</span>
+                <span className="col-status">状态</span>
+                <span className="col-priority">优先级</span>
+                <span className="col-progress">进度</span>
+                <span className="col-due">截止时间</span>
+                <span className="col-actions">操作</span>
+              </div>
+              {visibleRecords.map(record => {
+                const f = record.fields;
+                const dueStatus = getDueStatus(f['截止时间'], f['任务状态']);
+                const isHidden = f['隐私状态'] === '隐藏';
+                const isArchived = f['任务状态'] === '归档';
+                
+                return (
+                  <div
+                    key={record.record_id}
+                    className={`table-row ${isHidden ? 'task-hidden' : ''} ${isArchived ? 'task-archived' : ''}`}
+                  >
+                    <div className="col-title">
+                      <div className="row-title truncate">{f['任务标题'] || '未命名'}</div>
+                      {f['详细内容'] && (
+                        <div className="row-desc text-secondary text-xs truncate">
+                          {f['详细内容']}
+                        </div>
+                      )}
+                    </div>
+                    <div className="col-status">
+                      <span className={`tag ${STATUS_COLORS[f['任务状态']] || 'tag-gray'}`}>
+                        {f['任务状态'] || '未设置'}
+                      </span>
+                    </div>
+                    <div className="col-priority">
+                      <span className={`tag ${PRIORITY_COLORS[f['优先级']] || 'tag-gray'}`}>
+                        {f['优先级'] || '中'}
+                      </span>
+                    </div>
+                    <div className="col-progress">
+                      {f['进度占比'] !== undefined ? (
+                        <div className="row-progress">
+                          <div className="progress-bar-sm">
+                            <div
+                              className="progress-fill-sm"
+                              style={{
+                                width: `${f['进度占比'] || 0}%`,
+                                background: `linear-gradient(90deg, var(--accent-${color}), var(--accent-purple))`,
+                              }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted">{f['进度占比'] || 0}%</span>
+                        </div>
+                      ) : '-'}
+                    </div>
+                    <div className="col-due">
+                      {f['截止时间'] ? (
+                        <span className={`text-xs due-${dueStatus}`}>
+                          📅 {formatDate(f['截止时间'])}
+                        </span>
+                      ) : '-'}
+                    </div>
+                    <div className="col-actions">
+                      <button className="action-btn" title="查看详情" onClick={() => setViewRecord(record)}>👁</button>
+                      <button className="action-btn" title="编辑" onClick={() => openEditForm(record)}>✏️</button>
+                      <button className="action-btn" title={isArchived ? '恢复' : '归档'} onClick={() => handleArchive(record)}>
+                        {isArchived ? '↩️' : '📦'}
+                      </button>
+                      <button className="action-btn action-danger" title="删除" onClick={() => handleDelete(record)}>🗑</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
               );
             })}
           </div>
