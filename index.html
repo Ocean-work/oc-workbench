@@ -2383,6 +2383,277 @@ function FinanceModal({ title, children, onClose, onSubmit, submitting }) {
 }
 
 
+function Dashboard({ modules }) {
+  const [records, setRecords] = useState([]);
+  const [links, setLinks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [showPwd, setShowPwd] = useState(false);
+  const [unlocked, setUnlocked] = useState(isUnlocked());
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [allRecords, allLinks] = await Promise.all([
+        getAllRecords(),
+        getLinks().catch(() => []),
+      ]);
+      setRecords(allRecords);
+      setLinks(allLinks);
+      setError('');
+    } catch (err) {
+      console.error(err);
+      setError(err.message || '数据加载失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const visibleRecords = unlocked
+    ? records
+    : records.filter(r => r.fields['隐私状态'] !== '隐藏' && r.fields['任务状态'] !== '归档');
+
+  const overallStats = calcStatusStats(visibleRecords);
+  const moduleGroups = groupByModule(visibleRecords);
+
+  const moduleStats = modules.map(m => {
+    const items = moduleGroups[m.key] || [];
+    return {
+      ...m,
+      stats: calcStatusStats(items),
+      count: items.length,
+    };
+  });
+
+  const urgentTasks = visibleRecords
+    .filter(r => {
+      const status = getDueStatus(r.fields['截止时间'], r.fields['任务状态']);
+      return status === 'overdue' || status === 'today' || status === 'near';
+    })
+    .sort((a, b) => {
+      const aDate = Array.isArray(a.fields['截止时间']) ? a.fields['截止时间'][0] : a.fields['截止时间'];
+      const bDate = Array.isArray(b.fields['截止时间']) ? b.fields['截止时间'][0] : b.fields['截止时间'];
+      return (aDate || 0) - (bDate || 0);
+    })
+    .slice(0, 10);
+
+  const recentChanges = [...visibleRecords]
+    .sort((a, b) => {
+      const aTime = a.fields['更新时间'] || a.fields['创建时间'] || 0;
+      const bTime = b.fields['更新时间'] || b.fields['创建时间'] || 0;
+      const aTs = Array.isArray(aTime) ? aTime[0] : aTime;
+      const bTs = Array.isArray(bTime) ? bTime[0] : bTime;
+      return bTs - aTs;
+    })
+    .slice(0, 10);
+
+  return (
+    <div className="dashboard">
+      <div className="welcome-section">
+        <div>
+          <h1 className="welcome-title">o_C 总控工作台</h1>
+          <p className="welcome-sub text-secondary">
+            今天是 {new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
+          </p>
+        </div>
+        <div className="welcome-actions">
+          <button className="btn btn-secondary" onClick={loadData}>
+            🔄 刷新数据
+          </button>
+          {!unlocked && (
+            <button className="btn btn-primary" onClick={() => setShowPwd(true)}>
+              🔒 解锁隐私
+            </button>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div className="error-banner">
+          ⚠️ 数据加载失败：{error}
+          <button className="btn btn-secondary" style={{ marginLeft: '12px' }} onClick={loadData}>重试</button>
+        </div>
+      )}
+
+      <div className="stats-grid">
+        <div className="stat-card card">
+          <div className="stat-icon" style={{ background: 'rgba(59, 130, 246, 0.15)' }}>📋</div>
+          <div className="stat-info">
+            <div className="stat-value">{overallStats.total}</div>
+            <div className="stat-label">任务总数</div>
+          </div>
+        </div>
+        <div className="stat-card card">
+          <div className="stat-icon" style={{ background: 'rgba(16, 185, 129, 0.15)' }}>✅</div>
+          <div className="stat-info">
+            <div className="stat-value">{overallStats.done}</div>
+            <div className="stat-label">已完成</div>
+          </div>
+        </div>
+        <div className="stat-card card">
+          <div className="stat-icon" style={{ background: 'rgba(245, 158, 11, 0.15)' }}>⏳</div>
+          <div className="stat-info">
+            <div className="stat-value">{overallStats.doing}</div>
+            <div className="stat-label">进行中</div>
+          </div>
+        </div>
+        <div className="stat-card card">
+          <div className="stat-icon" style={{ background: 'rgba(239, 68, 68, 0.15)' }}>🔥</div>
+          <div className="stat-info">
+            <div className="stat-value">{overallStats.overdue + overallStats.todayDue}</div>
+            <div className="stat-label">紧急/逾期</div>
+          </div>
+        </div>
+        <div className="stat-card card">
+          <div className="stat-icon" style={{ background: 'rgba(139, 92, 246, 0.15)' }}>📊</div>
+          <div className="stat-info">
+            <div className="stat-value">{overallStats.completionRate}%</div>
+            <div className="stat-label">完成率</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="dashboard-grid">
+        <div className="card p-6 module-progress">
+          <h3 className="text-xl mb-4">各模块进度</h3>
+          <div className="module-list">
+            {moduleStats.map(m => (
+              <Link key={m.key} to={m.path} className="module-item">
+                <div className="module-header">
+                  <div className="flex items-center gap-3">
+                    <span className="module-icon">{m.icon}</span>
+                    <span className="module-name">{m.key}</span>
+                  </div>
+                  <span className="module-count">{m.count} 项</span>
+                </div>
+                <div className="progress-bar">
+                  <div
+                    className="progress-fill"
+                    style={{
+                      width: `${m.stats.completionRate}%`,
+                      background: `linear-gradient(90deg, var(--accent-${m.color}), var(--accent-purple))`,
+                    }}
+                  />
+                </div>
+                <div className="progress-info">
+                  <span className="text-xs text-muted">
+                    {m.stats.done}完成 / {m.stats.doing}进行 / {m.stats.todo}待办
+                  </span>
+                  <span className="text-xs font-medium">{m.stats.completionRate}%</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        <div className="card p-6 urgent-tasks">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xl">到期预警</h3>
+            <span className="tag tag-red">{urgentTasks.length} 项待处理</span>
+          </div>
+          {loading ? (
+            <div className="text-muted text-center py-8">加载中...</div>
+          ) : urgentTasks.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">🎉</div>
+              <div className="text-secondary">没有紧急任务，保持节奏</div>
+            </div>
+          ) : (
+            <div className="task-list">
+              {urgentTasks.map(t => {
+                const dueStatus = getDueStatus(t.fields['截止时间'], t.fields['任务状态']);
+                const statusMap = {
+                  overdue: { text: '已逾期', color: 'tag-red' },
+                  today: { text: '今日到期', color: 'tag-orange' },
+                  near: { text: '即将到期', color: 'tag-yellow' },
+                };
+                const statusInfo = statusMap[dueStatus] || { text: '', color: '' };
+                return (
+                  <div key={t.record_id} className="task-item">
+                    <div className={`task-dot dot-${dueStatus}`}></div>
+                    <div className="task-info">
+                      <div className="task-title truncate">{t.fields['任务标题'] || '未命名'}</div>
+                      <div className="task-meta text-xs text-muted">
+                        {t.fields['所属模块']} · {formatDate(t.fields['截止时间'])}
+                      </div>
+                    </div>
+                    <span className={`tag ${statusInfo.color}`}>{statusInfo.text}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="dashboard-grid">
+        <div className="card p-6 links-section">
+          <h3 className="text-xl mb-4">快速链接</h3>
+          <div className="links-grid">
+            {links.map(link => (
+              <a
+                key={link.recordId || link.record_id}
+                href={link['链接地址']}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="link-item"
+              >
+                <span className="link-icon">{link['图标'] || '🔗'}</span>
+                <span className="link-name truncate">{link['链接名称']}</span>
+              </a>
+            ))}
+            {links.length === 0 && (
+              <div className="empty-state col-span-full">
+                <div className="empty-icon">🔗</div>
+                <div className="text-secondary">暂无外部链接</div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="card p-6 recent-changes">
+          <h3 className="text-xl mb-4">最近变更</h3>
+          {recentChanges.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">📝</div>
+              <div className="text-secondary">暂无变更记录</div>
+            </div>
+          ) : (
+            <div className="changes-list">
+              {recentChanges.map(r => (
+                <div key={r.record_id} className="change-item">
+                  <div className="change-dot"></div>
+                  <div className="change-info">
+                    <div className="change-title truncate">{r.fields['任务标题'] || '未命名'}</div>
+                    <div className="change-meta text-xs text-muted">
+                      {r.fields['任务状态']} · {r.fields['所属模块']}
+                    </div>
+                  </div>
+                  <div className="change-time text-xs text-muted">
+                    {formatDate(r.fields['更新时间'] || r.fields['创建时间'])}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {showPwd && (
+        <PasswordModal
+          onSuccess={() => { setUnlocked(true); setShowPwd(false); }}
+          onClose={() => setShowPwd(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+
 function App() {
   const [unlocked, setUnlocked] = useState(isUnlocked());
   const [modules, setModules] = useState(DEFAULT_MODULES);
