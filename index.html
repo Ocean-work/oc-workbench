@@ -268,6 +268,7 @@ window.apmPlus("start");
   <div id="root"></div>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script type="text/babel">
+
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -385,6 +386,67 @@ function unlock() {
 }
 function lock() {
   localStorage.removeItem(STORAGE_KEY);
+}
+
+/* ====== 模块锁定功能 ====== */
+const LOCK_PASSWORD_KEY = 'oc_console_lock_password';
+const LOCKED_MODULES_KEY = 'oc_console_locked_modules';
+const DEFAULT_LOCK_PASSWORD = '.';
+
+function getLockPassword() {
+  return localStorage.getItem(LOCK_PASSWORD_KEY) || DEFAULT_LOCK_PASSWORD;
+}
+function checkLockPassword(input) {
+  return input === getLockPassword();
+}
+function setLockPassword(newPwd) {
+  localStorage.setItem(LOCK_PASSWORD_KEY, newPwd);
+}
+function getLockedModules() {
+  try {
+    return JSON.parse(localStorage.getItem(LOCKED_MODULES_KEY) || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+function saveLockedModules(arr) {
+  localStorage.setItem(LOCKED_MODULES_KEY, JSON.stringify(arr));
+}
+function isModuleLocked(modulePath) {
+  return getLockedModules().includes(modulePath);
+}
+function lockModule(modulePath) {
+  const arr = getLockedModules();
+  if (!arr.includes(modulePath)) {
+    arr.push(modulePath);
+    saveLockedModules(arr);
+  }
+}
+function unlockModule(modulePath) {
+  const arr = getLockedModules().filter(p => p !== modulePath);
+  saveLockedModules(arr);
+}
+
+// 模块解锁的会话态（进入模块后临时解锁，刷新页面需重新输入）
+const SESSION_UNLOCKED_KEY = 'oc_console_session_unlocked';
+function isSessionUnlocked(modulePath) {
+  try {
+    const map = JSON.parse(sessionStorage.getItem(SESSION_UNLOCKED_KEY) || '{}');
+    return !!map[modulePath];
+  } catch (e) {
+    return false;
+  }
+}
+function setSessionUnlocked(modulePath, value) {
+  try {
+    const map = JSON.parse(sessionStorage.getItem(SESSION_UNLOCKED_KEY) || '{}');
+    if (value) {
+      map[modulePath] = true;
+    } else {
+      delete map[modulePath];
+    }
+    sessionStorage.setItem(SESSION_UNLOCKED_KEY, JSON.stringify(map));
+  } catch (e) {}
 }
 
 // 日期工具
@@ -879,6 +941,144 @@ function PasswordModal({ onSuccess, onClose }) {
         <div className="password-hint text-xs text-muted">
           默认密码：888888
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ==========================================================
+   组件：模块解锁密码弹窗
+   ========================================================== */
+
+function ModuleUnlockModal({ title, onSuccess, onClose }) {
+  const [pwd, setPwd] = useState('');
+  const [error, setError] = useState('');
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (inputRef.current) inputRef.current.focus();
+  }, []);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (checkLockPassword(pwd)) {
+      if (onSuccess) onSuccess();
+    } else {
+      setError('密码错误');
+      setPwd('');
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content password-modal module-lock-modal" onClick={e => e.stopPropagation()}>
+        <div className="password-icon">🔒</div>
+        <h2 className="password-title">{title || '模块已锁定'}</h2>
+        <p className="password-desc">输入解锁密码以访问此模块</p>
+        <form onSubmit={handleSubmit}>
+          <input
+            ref={inputRef}
+            type="password"
+            value={pwd}
+            onChange={e => { setPwd(e.target.value); setError(''); }}
+            placeholder="请输入解锁密码"
+            className="password-input"
+            autoComplete="off"
+          />
+          {error && <div className="password-error">{error}</div>}
+          <div className="modal-btns" style={{ marginTop: '20px' }}>
+            <button type="button" className="btn btn-secondary" onClick={onClose}>取消</button>
+            <button type="submit" className="btn btn-primary">解锁</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ==========================================================
+   组件：修改解锁密码弹窗
+   ========================================================== */
+
+function ChangeLockPasswordModal({ onSuccess, onClose }) {
+  const [oldPwd, setOldPwd] = useState('');
+  const [newPwd, setNewPwd] = useState('');
+  const [confirmPwd, setConfirmPwd] = useState('');
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (inputRef.current) inputRef.current.focus();
+  }, []);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setError('');
+    if (!checkLockPassword(oldPwd)) {
+      setError('旧密码错误');
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      setError('两次输入的新密码不一致');
+      return;
+    }
+    if (!newPwd) {
+      setError('新密码不能为空');
+      return;
+    }
+    setLockPassword(newPwd);
+    setSuccess(true);
+    setTimeout(() => {
+      if (onSuccess) onSuccess();
+    }, 800);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content password-modal module-lock-modal" onClick={e => e.stopPropagation()}>
+        <div className="password-icon">🔐</div>
+        <h2 className="password-title">修改解锁密码</h2>
+        <p className="password-desc">修改所有模块共用的解锁密码</p>
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: '12px' }}>
+            <input
+              ref={inputRef}
+              type="password"
+              value={oldPwd}
+              onChange={e => { setOldPwd(e.target.value); setError(''); }}
+              placeholder="旧密码"
+              className="password-input"
+              autoComplete="off"
+            />
+          </div>
+          <div style={{ marginBottom: '12px' }}>
+            <input
+              type="password"
+              value={newPwd}
+              onChange={e => { setNewPwd(e.target.value); setError(''); }}
+              placeholder="新密码"
+              className="password-input"
+              autoComplete="off"
+            />
+          </div>
+          <div style={{ marginBottom: '4px' }}>
+            <input
+              type="password"
+              value={confirmPwd}
+              onChange={e => { setConfirmPwd(e.target.value); setError(''); }}
+              placeholder="确认新密码"
+              className="password-input"
+              autoComplete="off"
+            />
+          </div>
+          {error && <div className="password-error">{error}</div>}
+          {success && <div style={{ color: 'var(--accent-green)', fontSize: '13px', marginTop: '8px' }}>密码修改成功</div>}
+          <div className="modal-btns" style={{ marginTop: '20px' }}>
+            <button type="button" className="btn btn-secondary" onClick={onClose}>取消</button>
+            <button type="submit" className="btn btn-primary" disabled={success}>确认修改</button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -2389,7 +2589,7 @@ function FinanceModal({ title, children, onClose, onSubmit, submitting }) {
    模块详情页 ModulePage
    ========================================================== */
 
-function ModulePage({ moduleName, icon, color }) {
+function ModulePage({ moduleName, icon, color, modulePath }) {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -2402,6 +2602,34 @@ function ModulePage({ moduleName, icon, color }) {
   const [filters, setFilters] = useState({
     status: '', priority: '', search: '', showArchived: false,
   });
+
+  // 模块锁定状态
+  const [moduleLocked, setModuleLocked] = useState(false);
+  const [moduleUnlocked, setModuleUnlocked] = useState(false);
+  const [showLockModal, setShowLockModal] = useState(false);
+
+  const refreshModuleLock = () => {
+    if (!modulePath) return;
+    const locked = isModuleLocked(modulePath);
+    setModuleLocked(locked);
+    // 会话态解锁优先
+    setModuleUnlocked(locked ? isSessionUnlocked(modulePath) : true);
+  };
+
+  useEffect(() => {
+    refreshModuleLock();
+    const onStorage = () => refreshModuleLock();
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [modulePath]);
+
+  const handleModuleUnlock = () => {
+    if (modulePath) {
+      setSessionUnlocked(modulePath, true);
+      setModuleUnlocked(true);
+    }
+    setShowLockModal(false);
+  };
 
   useEffect(() => {
     loadRecords();
@@ -2556,24 +2784,56 @@ function ModulePage({ moduleName, icon, color }) {
         <div className="flex items-center gap-3">
           <span className="page-icon">{icon}</span>
           <div>
-            <h1 className="page-title">{moduleName}</h1>
+            <h1 className="page-title">
+              {moduleName}
+              {moduleLocked && <span className="page-lock-icon" title="模块已锁定">🔒</span>}
+            </h1>
             <div className="page-sub text-secondary">
-              共 {stats.total} 项任务 · {stats.doing} 进行中 · {stats.todo} 待办 · {stats.done} 已完成
+              {moduleLocked && !moduleUnlocked
+                ? '此模块已锁定，请解锁后查看内容'
+                : `共 ${stats.total} 项任务 · ${stats.doing} 进行中 · ${stats.todo} 待办 · ${stats.done} 已完成`}
             </div>
           </div>
         </div>
         <div className="page-actions flex gap-2">
-          {!unlocked && (
+          {moduleLocked && !moduleUnlocked && (
+            <button className="btn btn-warning" onClick={() => setShowLockModal(true)}>
+              🔓 解锁模块
+            </button>
+          )}
+          {(!moduleLocked || moduleUnlocked) && !unlocked && (
             <button className="btn btn-secondary" onClick={() => setShowPwd(true)}>
               🔒 解锁隐私
             </button>
           )}
-          <button className="btn btn-primary" onClick={openAddForm}>
-            + 新建任务
-          </button>
+          {(!moduleLocked || moduleUnlocked) && (
+            <button className="btn btn-primary" onClick={openAddForm}>
+              + 新建任务
+            </button>
+          )}
         </div>
       </div>
 
+      {/* 模块锁定 - 大锁界面 */}
+      {moduleLocked && !moduleUnlocked && (
+        <div className="module-lock-screen">
+          <div className="module-lock-content">
+            <button
+              className="module-lock-big-btn"
+              onClick={() => setShowLockModal(true)}
+              title="点击解锁"
+            >
+              <div className="module-lock-big-icon">🔒</div>
+              <div className="module-lock-big-text">模块已锁定</div>
+              <div className="module-lock-big-hint">点击输入密码解锁</div>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 模块内容 - 未锁定或已解锁时显示 */}
+      {(!moduleLocked || moduleUnlocked) && (
+        <>
       {error && (
         <div className="error-banner">
           ⚠️ {error}
@@ -2927,6 +3187,16 @@ function ModulePage({ moduleName, icon, color }) {
           </div>
         </div>
       )}
+        </>
+      )}
+
+      {showLockModal && (
+        <ModuleUnlockModal
+          title={`解锁「${moduleName}」`}
+          onSuccess={handleModuleUnlock}
+          onClose={() => setShowLockModal(false)}
+        />
+      )}
     </div>
   );
 }
@@ -2976,6 +3246,44 @@ function ModuleManagePage({ modules, onModulesChange }) {
   const [editingModule, setEditingModule] = useState(null);
   const [formData, setFormData] = useState({});
   const [saving, setSaving] = useState(false);
+  const [lockedMap, setLockedMap] = useState({});
+  const [showUnlockModal, setShowUnlockModal] = useState(false);
+  const [showChangePwdModal, setShowChangePwdModal] = useState(false);
+  const [unlockTarget, setUnlockTarget] = useState(null);
+
+  // 刷新锁定状态
+  const refreshLocked = () => {
+    const map = {};
+    getLockedModules().forEach(p => { map[p] = true; });
+    setLockedMap(map);
+  };
+
+  useEffect(() => {
+    refreshLocked();
+    const onStorage = () => refreshLocked();
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  const handleLock = (mod) => {
+    lockModule(mod.path);
+    refreshLocked();
+  };
+
+  const openUnlockModal = (mod) => {
+    setUnlockTarget(mod);
+    setShowUnlockModal(true);
+  };
+
+  const handleUnlockSuccess = () => {
+    if (unlockTarget) {
+      unlockModule(unlockTarget.path);
+      setSessionUnlocked(unlockTarget.path, false);
+      refreshLocked();
+    }
+    setShowUnlockModal(false);
+    setUnlockTarget(null);
+  };
 
   const openAddForm = () => {
     setEditingModule(null);
@@ -3063,11 +3371,16 @@ function ModuleManagePage({ modules, onModulesChange }) {
       </div>
 
       <div className="module-grid">
-        {modules.map(mod => (
-          <div key={mod.record_id || mod.key} className={`module-card card theme-${mod.color}`}>
+        {modules.map(mod => {
+          const isLocked = !!lockedMap[mod.path];
+          return (
+          <div key={mod.record_id || mod.key} className={`module-card card theme-${mod.color} ${isLocked ? 'module-card-locked' : ''}`}>
             <div className="module-card-header">
               <span className="module-icon">{mod.icon}</span>
-              <h3 className="module-name">{mod.key}</h3>
+              <h3 className="module-name">
+                {mod.key}
+                {isLocked && <span className="module-lock-icon" title="已锁定">🔒</span>}
+              </h3>
             </div>
             {mod.description && (
               <p className="module-desc text-secondary text-sm">{mod.description}</p>
@@ -3078,9 +3391,15 @@ function ModuleManagePage({ modules, onModulesChange }) {
             <div className="module-actions">
               <button className="btn btn-secondary btn-sm" onClick={() => openEditForm(mod)}>✏️ 编辑</button>
               <button className="btn btn-danger-ghost btn-sm" onClick={() => handleDelete(mod)}>🗑 删除</button>
+              {isLocked ? (
+                <button className="btn btn-warning btn-sm" onClick={() => openUnlockModal(mod)}>🔓 解锁</button>
+              ) : (
+                <button className="btn btn-secondary btn-sm" onClick={() => handleLock(mod)}>🔒 锁定</button>
+              )}
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowChangePwdModal(true)}>🔐 改密码</button>
             </div>
           </div>
-        ))}
+        );})}
       </div>
 
       {showForm && (
@@ -3176,6 +3495,21 @@ function ModuleManagePage({ modules, onModulesChange }) {
             </form>
           </div>
         </div>
+      )}
+
+      {showUnlockModal && (
+        <ModuleUnlockModal
+          title={`解锁「${unlockTarget?.key || ''}」`}
+          onSuccess={handleUnlockSuccess}
+          onClose={() => { setShowUnlockModal(false); setUnlockTarget(null); }}
+        />
+      )}
+
+      {showChangePwdModal && (
+        <ChangeLockPasswordModal
+          onSuccess={() => setShowChangePwdModal(false)}
+          onClose={() => setShowChangePwdModal(false)}
+        />
       )}
     </div>
   );
@@ -3504,7 +3838,7 @@ function App() {
               path={m.path}
               element={m.path === '/finance' 
                 ? <FinancePage />
-                : <ModulePage moduleName={m.key} icon={m.icon} color={m.color} moduleHidden={m.hidden} />
+                : <ModulePage moduleName={m.key} icon={m.icon} color={m.color} modulePath={m.path} moduleHidden={m.hidden} />
               }
             />
           ))}
@@ -3524,6 +3858,7 @@ function App() {
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(<ErrorBoundary><App /></ErrorBoundary>);
 
+  
   </script>
 
 </body></html>
