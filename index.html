@@ -278,13 +278,14 @@ class ErrorBoundary extends React.Component {
   }
   componentDidCatch(error, info) {
     console.error("ErrorBoundary:", error, info);
+    this.setState({ info: info.componentStack || '' });
   }
   render() {
     if (this.state.hasError) {
       return (
         <div style={{padding:'40px',color:'#ff6b6b',background:'#1a1a2e',minHeight:'100vh',fontFamily:'sans-serif'}}>
           <h2>渲染错误</h2>
-          <pre style={{background:'#000',padding:'20px',borderRadius:'8px',overflow:'auto',whiteSpace:'pre-wrap'}}>{this.state.error}</pre>
+          <pre style={{background:'#000',padding:'20px',borderRadius:'8px',overflow:'auto',whiteSpace:'pre-wrap',fontSize:'12px'}}>{this.state.error + '\n\n--- Stack ---\n' + (this.state.info || '')}</pre>
         </div>
       );
     }
