@@ -1093,6 +1093,7 @@ function Sidebar({ onLock, modules, onModulesChange }) {
   const location = { pathname: locationPath };
   const [unlocked, setUnlocked] = useState(isUnlocked());
   const [showPwd, setShowPwd] = useState(false);
+  const [showChangePwdModal, setShowChangePwdModal] = useState(false);
 
   useEffect(() => {
     const check = () => setUnlocked(isUnlocked());
@@ -1152,13 +1153,13 @@ function Sidebar({ onLock, modules, onModulesChange }) {
       </nav>
 
       <div className="sidebar-footer">
-        <button className="lock-btn" onClick={handleLock}>
-          <span>{unlocked ? '🔓 已解锁' : '🔒 已锁定'}</span>
-        </button>
-        <div className="sidebar-hint text-xs text-muted">
-          {unlocked ? '点击锁定隐私数据' : '输入密码解锁隐藏数据'}
+        <div className="nav-item sidebar-change-pwd-btn" onClick={() => setShowChangePwdModal(true)}>
+          <span className="nav-icon">🔐</span>
+          <span className="nav-text">修改解锁密码</span>
         </div>
       </div>
+
+
 
       {showPwd && <PasswordModal onClose={() => setShowPwd(false)} onSuccess={() => { setUnlocked(true); setShowPwd(false); }} />}
     </aside>
@@ -2595,6 +2596,7 @@ function ModulePage({ moduleName, icon, color, modulePath }) {
   const [error, setError] = useState('');
   const [unlocked, setUnlocked] = useState(isUnlocked());
   const [showPwd, setShowPwd] = useState(false);
+  const [showChangePwdModal, setShowChangePwdModal] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
   const [formData, setFormData] = useState({});
@@ -2796,11 +2798,6 @@ function ModulePage({ moduleName, icon, color, modulePath }) {
           </div>
         </div>
         <div className="page-actions flex gap-2">
-          {moduleLocked && !moduleUnlocked && (
-            <button className="btn btn-warning" onClick={() => setShowLockModal(true)}>
-              🔓 解锁模块
-            </button>
-          )}
           {(!moduleLocked || moduleUnlocked) && !unlocked && (
             <button className="btn btn-secondary" onClick={() => setShowPwd(true)}>
               🔒 解锁隐私
@@ -2818,15 +2815,13 @@ function ModulePage({ moduleName, icon, color, modulePath }) {
       {moduleLocked && !moduleUnlocked && (
         <div className="module-lock-screen">
           <div className="module-lock-content">
-            <button
-              className="module-lock-big-btn"
+            <div
+              className="module-lock-big-icon-only"
               onClick={() => setShowLockModal(true)}
               title="点击解锁"
             >
-              <div className="module-lock-big-icon">🔒</div>
-              <div className="module-lock-big-text">模块已锁定</div>
-              <div className="module-lock-big-hint">点击输入密码解锁</div>
-            </button>
+              🔒
+            </div>
           </div>
         </div>
       )}
@@ -3248,7 +3243,6 @@ function ModuleManagePage({ modules, onModulesChange }) {
   const [saving, setSaving] = useState(false);
   const [lockedMap, setLockedMap] = useState({});
   const [showUnlockModal, setShowUnlockModal] = useState(false);
-  const [showChangePwdModal, setShowChangePwdModal] = useState(false);
   const [unlockTarget, setUnlockTarget] = useState(null);
 
   // 刷新锁定状态
@@ -3379,7 +3373,7 @@ function ModuleManagePage({ modules, onModulesChange }) {
               <span className="module-icon">{mod.icon}</span>
               <h3 className="module-name">
                 {mod.key}
-                {isLocked && <span className="module-lock-icon" title="已锁定">🔒</span>}
+                {isLocked && <span className="module-lock-icon" title="点击解锁" onClick={() => openUnlockModal(mod)}>🔒</span>}
               </h3>
             </div>
             {mod.description && (
@@ -3391,12 +3385,9 @@ function ModuleManagePage({ modules, onModulesChange }) {
             <div className="module-actions">
               <button className="btn btn-secondary btn-sm" onClick={() => openEditForm(mod)}>✏️ 编辑</button>
               <button className="btn btn-danger-ghost btn-sm" onClick={() => handleDelete(mod)}>🗑 删除</button>
-              {isLocked ? (
-                <button className="btn btn-warning btn-sm" onClick={() => openUnlockModal(mod)}>🔓 解锁</button>
-              ) : (
+              {!isLocked && (
                 <button className="btn btn-secondary btn-sm" onClick={() => handleLock(mod)}>🔒 锁定</button>
               )}
-              <button className="btn btn-secondary btn-sm" onClick={() => setShowChangePwdModal(true)}>🔐 改密码</button>
             </div>
           </div>
         );})}
@@ -3505,12 +3496,7 @@ function ModuleManagePage({ modules, onModulesChange }) {
         />
       )}
 
-      {showChangePwdModal && (
-        <ChangeLockPasswordModal
-          onSuccess={() => setShowChangePwdModal(false)}
-          onClose={() => setShowChangePwdModal(false)}
-        />
-      )}
+
     </div>
   );
 }

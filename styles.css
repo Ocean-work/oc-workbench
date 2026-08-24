@@ -165,6 +165,28 @@ input, textarea, select {
   background: rgba(239, 68, 68, 0.2);
 }
 
+.btn-danger-ghost {
+  background: transparent;
+  color: var(--accent-red);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+.btn-danger-ghost:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.btn-warning {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.btn-warning:hover {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: rgba(245, 158, 11, 0.5);
+}
+
+.w-full { width: 100%; }
+
 .tag {
   display: inline-block;
   padding: 2px 10px;
@@ -342,6 +364,9 @@ input, textarea, select {
 .sidebar-footer {
   padding: 16px;
   border-top: 1px solid var(--border-color);
+}
+.sidebar-change-pwd-btn {
+  cursor: pointer;
 }
 
 .lock-btn {
@@ -1076,6 +1101,121 @@ input, textarea, select {
 .password-hint {
   margin-top: 16px;
   opacity: 0.5;
+}
+
+/* Module lock modal */
+.module-lock-modal .modal-btns {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+.module-lock-modal .modal-btns .btn {
+  flex: 1;
+  min-width: 100px;
+}
+
+/* Module card locked state */
+.module-card-locked {
+  opacity: 0.85;
+  position: relative;
+}
+.module-card-locked .module-desc {
+  filter: blur(6px);
+  user-select: none;
+  pointer-events: none;
+}
+.module-card-locked .module-meta {
+  filter: blur(6px);
+  user-select: none;
+  pointer-events: none;
+}
+.module-card-locked::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(168,85,247,0.6), rgba(236,72,153,0.6));
+  border-radius: 8px 8px 0 0;
+}
+.module-lock-icon {
+  margin-left: 6px;
+  font-size: 14px;
+  vertical-align: middle;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-block;
+}
+.module-lock-icon:hover {
+  transform: scale(1.2);
+  filter: drop-shadow(0 0 6px rgba(168, 85, 247, 0.6));
+}
+.page-lock-icon {
+  margin-left: 8px;
+  font-size: 18px;
+  vertical-align: middle;
+}
+
+/* Module lock screen - big lock */
+.module-lock-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  padding: 40px;
+}
+.module-lock-content {
+  text-align: center;
+}
+.module-lock-big-btn {
+  background: rgba(168, 85, 247, 0.08);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  border-radius: 24px;
+  padding: 48px 72px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: var(--text-primary);
+  font-family: inherit;
+}
+.module-lock-big-btn:hover {
+  background: rgba(168, 85, 247, 0.15);
+  border-color: rgba(168, 85, 247, 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(168, 85, 247, 0.15);
+}
+.module-lock-big-btn:active {
+  transform: translateY(0);
+}
+.module-lock-big-icon {
+  font-size: 96px;
+  margin-bottom: 20px;
+  animation: lockFloat 3s ease-in-out infinite;
+}
+.module-lock-big-icon-only {
+  font-size: 140px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  animation: lockFloat 3s ease-in-out infinite;
+  display: inline-block;
+  filter: drop-shadow(0 4px 20px rgba(168, 85, 247, 0.25));
+}
+.module-lock-big-icon-only:hover {
+  transform: scale(1.1) translateY(-4px);
+  filter: drop-shadow(0 8px 40px rgba(168, 85, 247, 0.45));
+}
+@keyframes lockFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.module-lock-big-text {
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+.module-lock-big-hint {
+  font-size: 14px;
+  color: var(--text-secondary);
+  opacity: 0.7;
 }
 
 /* ========== 响应式 ========== */
@@ -2188,3 +2328,4 @@ input, textarea, select {
   .finance-tabs { overflow-x: auto; flex-wrap: nowrap; }
   .finance-tab { flex-shrink: 0; white-space: nowrap; }
 }
+
