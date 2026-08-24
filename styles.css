@@ -1316,7 +1316,7 @@ input, textarea, select {
 
 .table-header {
   display: grid;
-  grid-template-columns: 2.5fr 1fr 1fr 1.2fr 1fr 120px;
+  grid-template-columns: 2.5fr 1fr 1fr 1.2fr 1fr 110px;
   gap: 12px;
   padding: 12px 16px;
   font-size: 12px;
@@ -1333,7 +1333,7 @@ input, textarea, select {
 
 .table-row {
   display: grid;
-  grid-template-columns: 2.5fr 1fr 1fr 1.2fr 1fr 120px;
+  grid-template-columns: 2.5fr 1fr 1fr 1.2fr 1fr 110px;
   gap: 12px;
   padding: 14px 16px;
   align-items: center;
@@ -1398,9 +1398,21 @@ input, textarea, select {
 
 .col-actions {
   display: flex;
-  gap: 4px;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 2px;
   align-items: center;
   justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.table-row .col-actions .action-btn {
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
+  padding: 0;
+  min-width: 22px;
+  flex-shrink: 0;
 }
 
 /* 列表视图下筛选栏响应式调整 */
