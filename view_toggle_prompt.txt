@@ -1,0 +1,166 @@
+请给模块详情页（ModulePage 组件）增加卡片/列表视图切换功能，具体修改如下：
+
+## 1. app.jsx - 增加视图状态
+
+在 ModulePage 组件中，filters state 后面添加：
+```jsx
+const [viewMode, setViewMode] = useState(() => {
+  return localStorage.getItem('oc_view_' + moduleName) || 'card';
+});
+
+const handleViewChange = (mode) => {
+  setViewMode(mode);
+  localStorage.setItem('oc_view_' + moduleName, mode);
+};
+```
+
+## 2. app.jsx - 筛选栏增加视图切换按钮
+
+在 filter-bar 的"刷新"按钮前面，添加视图切换按钮组：
+```jsx
+<div className="view-toggle">
+  <button
+    className={`view-btn ${viewMode === 'card' ? 'active' : ''}`}
+    onClick={() => handleViewChange('card')}
+    title="卡片视图"
+  >
+    ▦ 卡片
+  </button>
+  <button
+    className={`view-btn ${viewMode === 'list' ? 'active' : ''}`}
+    onClick={() => handleViewChange('list')}
+    title="列表视图"
+  >
+    ☰ 列表
+  </button>
+</div>
+```
+
+## 3. app.jsx - 列表视图渲染
+
+在原有的 task-cards 卡片区域外面套一个条件渲染：
+- viewMode === 'card' 时渲染原有的 task-cards 卡片网格（保持原样不动）
+- viewMode === 'list' 时渲染列表视图（紧凑表格行形式）
+
+列表视图每行包含：任务标题+描述摘要、状态标签、优先级标签、进度条+百分比、截止时间、操作按钮（查看/编辑/归档/删除）
+
+列表代码结构：
+```jsx
+<div className="task-list-table">
+  <div className="table-header">
+    <span className="col-title">任务</span>
+    <span className="col-status">状态</span>
+    <span className="col-priority">优先级</span>
+    <span className="col-progress">进度</span>
+    <span className="col-due">截止时间</span>
+    <span className="col-actions">操作</span>
+  </div>
+  {visibleRecords.map(record => {
+    const f = record.fields;
+    const dueStatus = getDueStatus(f['截止时间'], f['任务状态']);
+    const isHidden = f['隐私状态'] === '隐藏';
+    const isArchived = f['任务状态'] === '归档';
+    return (
+      <div key={record.record_id} className={`table-row ${isHidden ? 'task-hidden' : ''} ${isArchived ? 'task-archived' : ''}`}>
+        <div className="col-title">
+          <div className="row-title truncate">{f['任务标题'] || '未命名'}</div>
+          {f['详细内容'] && <div className="row-desc text-secondary text-xs truncate">{f['详细内容']}</div>}
+        </div>
+        <div className="col-status">
+          <span className={`tag ${STATUS_COLORS[f['任务状态']] || 'tag-gray'}`}>{f['任务状态'] || '未设置'}</span>
+        </div>
+        <div className="col-priority">
+          <span className={`tag ${PRIORITY_COLORS[f['优先级']] || 'tag-gray'}`}>{f['优先级'] || '中'}</span>
+        </div>
+        <div className="col-progress">
+          {f['进度占比'] !== undefined ? (
+            <div className="row-progress">
+              <div className="progress-bar-sm"><div className="progress-fill-sm" style={{ width: `${f['进度占比'] || 0}%`, background: `linear-gradient(90deg, var(--accent-${color}), var(--accent-purple))` }} /></div>
+              <span className="text-xs text-muted">{f['进度占比'] || 0}%</span>
+            </div>
+          ) : '-'}
+        </div>
+        <div className="col-due">
+          {f['截止时间'] ? <span className={`text-xs due-${dueStatus}`}>📅 {formatDate(f['截止时间'])}</span> : '-'}
+        </div>
+        <div className="col-actions">
+          <button className="action-btn" title="查看详情" onClick={() => setViewRecord(record)}>👁</button>
+          <button className="action-btn" title="编辑" onClick={() => openEditForm(record)}>✏️</button>
+          <button className="action-btn" title={isArchived ? '恢复' : '归档'} onClick={() => handleArchive(record)}>{isArchived ? '↩️' : '📦'}</button>
+          <button className="action-btn action-danger" title="删除" onClick={() => handleDelete(record)}>🗑</button>
+        </div>
+      </div>
+    );
+  })}
+</div>
+```
+
+## 4. styles.css - 追加样式
+
+把以下 CSS 追加到 styles.css 末尾：
+```css
+/* 视图切换按钮 */
+.view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  padding: 3px;
+  margin-left: auto;
+  margin-right: 12px;
+}
+.view-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.view-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+.view-btn.active { background: var(--accent-primary); color: white; font-weight: 500; }
+
+/* 列表视图 */
+.task-list-table { display: flex; flex-direction: column; gap: 0; }
+.table-header {
+  display: grid;
+  grid-template-columns: 2.5fr 1fr 1fr 1.2fr 1fr 120px;
+  gap: 12px;
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border-color);
+}
+.table-row {
+  display: grid;
+  grid-template-columns: 2.5fr 1fr 1fr 1.2fr 1fr 120px;
+  gap: 12px;
+  padding: 14px 16px;
+  align-items: center;
+  border-bottom: 1px solid var(--border-light);
+  transition: background 0.2s ease;
+}
+.table-row:hover { background: var(--bg-hover); }
+.table-row.task-hidden { opacity: 0.5; }
+.table-row.task-archived { opacity: 0.6; }
+.row-title { font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 2px; }
+.row-desc { max-width: 100%; }
+.col-title { overflow: hidden; }
+.col-status, .col-priority { display: flex; align-items: center; }
+.col-progress { display: flex; flex-direction: column; gap: 4px; }
+.row-progress { display: flex; align-items: center; gap: 8px; width: 100%; }
+.row-progress .progress-bar-sm { flex: 1; }
+.col-due { display: flex; align-items: center; }
+.col-actions { display: flex; gap: 4px; align-items: center; justify-content: flex-end; }
+```
+
+注意：viewMode 状态和 handleViewChange 函数是在 ModulePage 组件内部的，列表视图里用到的变量（visibleRecords, getDueStatus, formatDate, STATUS_COLORS, PRIORITY_COLORS, color, setViewRecord, openEditForm, handleArchive, handleDelete）在 ModulePage 组件里都已经存在了，直接用即可。
+
+改完后部署到线上。
