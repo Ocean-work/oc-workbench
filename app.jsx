@@ -1,3 +1,29 @@
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error: error.toString() };
+  }
+  componentDidCatch(error, info) {
+    console.error("ErrorBoundary:", error, info);
+    this.setState({ info: info.componentStack || '' });
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{padding:'40px',color:'#ff6b6b',background:'#1a1a2e',minHeight:'100vh',fontFamily:'sans-serif'}}>
+          <h2>渲染错误</h2>
+          <pre style={{background:'#000',padding:'20px',borderRadius:'8px',overflow:'auto',whiteSpace:'pre-wrap',fontSize:'12px'}}>{this.state.error + '\n\n--- Stack ---\n' + (this.state.info || '')}</pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 /* ==========================================================
    o_C 总控 · 一体化工作台
    单文件 React 应用（零构建，Babel Standalone 运行时编译）
@@ -92,6 +118,67 @@ function lock() {
   localStorage.removeItem(STORAGE_KEY);
 }
 
+/* ====== 模块锁定功能 ====== */
+const LOCK_PASSWORD_KEY = 'oc_console_lock_password';
+const LOCKED_MODULES_KEY = 'oc_console_locked_modules';
+const DEFAULT_LOCK_PASSWORD = '.';
+
+function getLockPassword() {
+  return localStorage.getItem(LOCK_PASSWORD_KEY) || DEFAULT_LOCK_PASSWORD;
+}
+function checkLockPassword(input) {
+  return input === getLockPassword();
+}
+function setLockPassword(newPwd) {
+  localStorage.setItem(LOCK_PASSWORD_KEY, newPwd);
+}
+function getLockedModules() {
+  try {
+    return JSON.parse(localStorage.getItem(LOCKED_MODULES_KEY) || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+function saveLockedModules(arr) {
+  localStorage.setItem(LOCKED_MODULES_KEY, JSON.stringify(arr));
+}
+function isModuleLocked(modulePath) {
+  return getLockedModules().includes(modulePath);
+}
+function lockModule(modulePath) {
+  const arr = getLockedModules();
+  if (!arr.includes(modulePath)) {
+    arr.push(modulePath);
+    saveLockedModules(arr);
+  }
+}
+function unlockModule(modulePath) {
+  const arr = getLockedModules().filter(p => p !== modulePath);
+  saveLockedModules(arr);
+}
+
+// 模块解锁的会话态（进入模块后临时解锁，刷新页面需重新输入）
+const SESSION_UNLOCKED_KEY = 'oc_console_session_unlocked';
+function isSessionUnlocked(modulePath) {
+  try {
+    const map = JSON.parse(sessionStorage.getItem(SESSION_UNLOCKED_KEY) || '{}');
+    return !!map[modulePath];
+  } catch (e) {
+    return false;
+  }
+}
+function setSessionUnlocked(modulePath, value) {
+  try {
+    const map = JSON.parse(sessionStorage.getItem(SESSION_UNLOCKED_KEY) || '{}');
+    if (value) {
+      map[modulePath] = true;
+    } else {
+      delete map[modulePath];
+    }
+    sessionStorage.setItem(SESSION_UNLOCKED_KEY, JSON.stringify(map));
+  } catch (e) {}
+}
+
 // 日期工具
 function formatDate(dateInput) {
   if (!dateInput) return '-';
@@ -136,6 +223,21 @@ function parseVersionHistory(text) {
   });
 }
 
+// 飞书单选字段取值工具函数
+// 飞书单选字段返回对象数组 [{text: "值"}] 或 [{name: "值"}]，多选同理
+// 该函数统一处理：字符串直接返回，数组取第一个元素的 text/name，其他返回空字符串
+function getFieldValue(fieldValue) {
+  if (!fieldValue) return '';
+  if (typeof fieldValue === 'string') return fieldValue;
+  if (Array.isArray(fieldValue)) {
+    const first = fieldValue[0];
+    if (!first) return '';
+    if (typeof first === 'string') return first;
+    return first.text || first.name || '';
+  }
+  return '';
+}
+
 function calcStatusStats(records) {
   const stats = {
     total: records.length, todo: 0, doing: 0, done: 0,
@@ -147,7 +249,7 @@ function calcStatusStats(records) {
   threeDaysLater.setDate(today.getDate() + 3);
 
   records.forEach(r => {
-    const status = r.fields['任务状态'];
+    const status = getFieldValue(r.fields['任务状态']);
     const dueText = r.fields['截止时间'];
     let dueDate = null;
     if (dueText) {
@@ -174,10 +276,15 @@ function calcStatusStats(records) {
   return stats;
 }
 
+// 获取记录的所属模块
+function getRecordModule(record) {
+  return getFieldValue(record.fields['所属模块']) || '未分类';
+}
+
 function groupByModule(records) {
   const groups = {};
   records.forEach(r => {
-    const module = r.fields['所属模块'] || '未分类';
+    const module = getRecordModule(r);
     if (!groups[module]) groups[module] = [];
     groups[module].push(r);
   });
@@ -197,20 +304,26 @@ const FEISHU_LINK_TABLE_ID = 'tblmJxq9iOtGLmDz';
 const FEISHU_MODULE_TABLE_ID = 'tblo2A5lbJxcP7Jx';
 const FEISHU_BASE = 'https://open.feishu.cn/open-apis';
 
-// 飞书 API 代理（Cloudflare Workers）
+// 飞书 API 代理
 const FEISHU_PROXY = 'https://d78rws3qxj.coze.site/api/feishu';
 
 async function proxyFetch(targetUrl, options = {}) {
   // 将飞书地址转换为代理地址
-  const path = targetUrl.replace('https://open.feishu.cn/open-apis', '');
-  const url = FEISHU_PROXY + path;
+  // 原地址：https://open.feishu.cn/open-apis/bitable/v1/...
+  // 目标：https://d78rws3qxj.coze.site/api/feishu/bitable/v1/...
+  const feishuPath = targetUrl.replace('https://open.feishu.cn/open-apis', '');
+  const url = FEISHU_PROXY + feishuPath;
   
-  // 最多重试 3 次（应对 Worker 冷启动 / 网络抖动）
+  // 写操作（POST/PUT/DELETE）只重试 1 次，避免重复执行；GET 请求重试 3 次
+  const method = (options.method || 'GET').toUpperCase();
+  const isWriteOp = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method);
+  const maxRetries = isWriteOp ? 1 : 3;
+  
   let lastError = null;
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < maxRetries; i++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时（应对冷启动+网络延迟）
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
       const res = await fetch(url, {
         ...options,
         signal: controller.signal,
@@ -219,13 +332,27 @@ async function proxyFetch(targetUrl, options = {}) {
       return res;
     } catch (e) {
       lastError = e;
-      console.warn(`代理请求第 ${i+1} 次失败:`, e.message);
-      if (i < 2) {
+      const errorType = e.name === 'AbortError' ? '超时' : '网络错误';
+      console.warn(`代理请求第 ${i+1}/${maxRetries} 次失败 (${errorType}):`, e.message, 'URL:', url);
+      
+      // 写操作失败时不重试，直接抛出
+      if (isWriteOp) {
+        const hint = e.name === 'AbortError' 
+          ? '请求超时，请检查网络连接后重试' 
+          : '网络请求失败，请检查网络连接或稍后重试';
+        throw new Error(`${hint} (${e.message || errorType})`);
+      }
+      
+      // GET 请求才进行重试
+      if (i < maxRetries - 1) {
         await new Promise(r => setTimeout(r, 500 * (i + 1))); // 递增等待
       }
     }
   }
-  throw lastError || new Error('代理请求失败');
+  
+  // GET 请求所有重试都失败
+  const errorType = lastError?.name === 'AbortError' ? '请求超时' : '网络请求失败';
+  throw new Error(`${errorType}，请检查网络连接后重试 (${lastError?.message || '未知错误'})`);
 }
 
 // 从 localStorage 读取配置（用户可自定义密钥）
@@ -244,43 +371,12 @@ function getConfig() {
   };
 }
 
-// token 缓存
-let cachedToken = null;
-let tokenExpireTime = 0;
-
-async function getAccessToken() {
-  const config = getConfig();
-  const now = Date.now();
-  if (cachedToken && now < tokenExpireTime - 60000) {
-    return cachedToken;
-  }
-
-  const targetUrl = `${FEISHU_BASE}/auth/v3/tenant_access_token/internal`;
-  const res = await proxyFetch(targetUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      app_id: config.appId,
-      app_secret: config.appSecret,
-    }),
-  });
-  const data = await res.json();
-  if (data.code !== 0) {
-    throw new Error(data.msg || '获取token失败，请检查飞书应用配置');
-  }
-  cachedToken = data.tenant_access_token;
-  tokenExpireTime = now + data.expire * 1000;
-  return cachedToken;
-}
-
 async function feishuRequest(path, options = {}) {
-  const token = await getAccessToken();
   const targetUrl = `${FEISHU_BASE}${path}`;
   const res = await proxyFetch(targetUrl, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
       ...options.headers,
     },
   });
@@ -291,7 +387,70 @@ async function feishuRequest(path, options = {}) {
   return data.data;
 }
 
-// 获取所有任务记录（自动翻页）
+// 统一清洗飞书字段：将所有富文本数组转成纯文本字符串
+// 避免组件层漏调用 getFieldValue 导致 React #31 渲染错误
+function cleanFields(fields) {
+  const cleaned = {};
+  for (const key in fields) {
+    const val = fields[key];
+    // 多选字段：元素是字符串，保留数组
+    if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'string') {
+      cleaned[key] = val;
+    }
+    // 其他情况（富文本对象数组、纯字符串、数字等）统一走 getFieldValue
+    else {
+      cleaned[key] = getFieldValue(val);
+    }
+  }
+  return cleaned;
+}
+
+// 通用函数：按 table_id 获取飞书多维表格记录（自动翻页）
+async function searchRecordsByTable(appToken, tableId) {
+  const allItems = [];
+  let pageToken = '';
+  let hasMore = true;
+
+  while (hasMore) {
+    const url = `/bitable/v1/apps/${appToken}/tables/${tableId}/records/search`;
+    const body = { page_size: 500 };
+    if (pageToken) body.page_token = pageToken;
+
+    const data = await feishuRequest(url, { method: 'POST', body: JSON.stringify(body) });
+    allItems.push(...(data.items || []));
+    hasMore = data.has_more;
+    pageToken = data.page_token || '';
+  }
+
+  return allItems.map(item => ({ ...item, fields: cleanFields(item.fields) }));
+}
+
+// 财务模块配置
+const FINANCE_CONFIG = {
+  appToken: 'ZGcrbdAztars3CsTFtAcUciLn9e',
+  tables: {
+    ledger: 'tblDX2yQseShTfkE',      // 记账表
+    assets: 'tblMLfwcwJqc09Mi',       // 资产库表
+    income: 'tbl3L1H2yaId4ZVU',       // 收入表
+    loans: 'tbltMkfyPM3x0WdU',        // 贷款负债表
+    reminders: 'tblvobprvhfEw6qr',    // 财务提醒表
+  }
+};
+
+// 获取所有财务数据
+async function fetchAllFinanceData() {
+  const { appToken, tables } = FINANCE_CONFIG;
+  const [ledger, assets, income, loans, reminders] = await Promise.all([
+    searchRecordsByTable(appToken, tables.ledger),
+    searchRecordsByTable(appToken, tables.assets),
+    searchRecordsByTable(appToken, tables.income),
+    searchRecordsByTable(appToken, tables.loans),
+    searchRecordsByTable(appToken, tables.reminders),
+  ]);
+  return { ledger, assets, income, loans, reminders };
+}
+
+// 获取所有任务记录（使用 POST search 接口，自动翻页）
 async function getAllRecords() {
   const config = getConfig();
   const allItems = [];
@@ -299,16 +458,18 @@ async function getAllRecords() {
   let hasMore = true;
 
   while (hasMore) {
-    let url = `/bitable/v1/apps/${config.appToken}/tables/${config.tableId}/records?page_size=500`;
-    if (pageToken) url += `&page_token=${pageToken}`;
+    const url = `/bitable/v1/apps/${config.appToken}/tables/${config.tableId}/records/search`;
+    const body = { page_size: 500 };
+    if (pageToken) body.page_token = pageToken;
 
-    const data = await feishuRequest(url);
+    const data = await feishuRequest(url, { method: 'POST', body: JSON.stringify(body) });
     allItems.push(...(data.items || []));
     hasMore = data.has_more;
     pageToken = data.page_token;
   }
 
-  return allItems;
+  // 统一清洗所有字段值（富文本 → 纯文本），组件层直接安全使用
+  return allItems.map(item => ({ ...item, fields: cleanFields(item.fields) }));
 }
 
 // 创建记录
@@ -358,22 +519,54 @@ async function deleteRecord(recordId) {
   return data;
 }
 
-// 获取业务模块列表
+// 按表创建记录
+async function createRecordByTable(appToken, tableId, fields) {
+  const data = await feishuRequest(
+    `/bitable/v1/apps/${appToken}/tables/${tableId}/records`,
+    { method: 'POST', body: JSON.stringify({ fields }) }
+  );
+  const item = data.record;
+  return { ...item, fields: cleanFields(item.fields) };
+}
+
+// 按表更新记录
+async function updateRecordByTable(appToken, tableId, recordId, fields) {
+  const data = await feishuRequest(
+    `/bitable/v1/apps/${appToken}/tables/${tableId}/records/${recordId}`,
+    { method: 'PUT', body: JSON.stringify({ fields }) }
+  );
+  const item = data.record;
+  return { ...item, fields: cleanFields(item.fields) };
+}
+
+// 按表删除记录
+async function deleteRecordByTable(appToken, tableId, recordId) {
+  await feishuRequest(
+    `/bitable/v1/apps/${appToken}/tables/${tableId}/records/${recordId}`,
+    { method: 'DELETE' }
+  );
+  return true;
+}
+
+
+// 获取业务模块列表（使用 POST search 接口）
 async function getModules() {
   const config = getConfig();
   const data = await feishuRequest(
-    `/bitable/v1/apps/${config.appToken}/tables/${config.moduleTableId}/records?page_size=200`
+    `/bitable/v1/apps/${config.appToken}/tables/${config.moduleTableId}/records/search`,
+    { method: 'POST', body: JSON.stringify({ page_size: 200 }) }
   );
   const items = (data.items || [])
     .map(item => ({
       record_id: item.record_id,
-      key: item.fields['模块名称'] || '',
-      icon: item.fields['图标'] || '📁',
-      color: item.fields['主题色'] || 'blue',
-      path: '/' + (item.fields['路径标识'] || ''),
-      pathKey: item.fields['路径标识'] || '',
+      key: getFieldValue(item.fields['模块名称']) || '',
+      icon: getFieldValue(item.fields['图标']) || '📁',
+      color: getFieldValue(item.fields['主题色']) || 'blue',
+      path: '/' + (getFieldValue(item.fields['路径标识']) || ''),
+      pathKey: getFieldValue(item.fields['路径标识']) || '',
       sort: item.fields['排序'] || 99,
-      description: item.fields['描述'] || '',
+      description: getFieldValue(item.fields['描述']) || '',
+      hidden: getFieldValue(item.fields['隐藏状态']) === '隐藏',
     }))
     .sort((a, b) => a.sort - b.sort);
   return items;
@@ -415,16 +608,17 @@ async function deleteModule(recordId) {
   return data;
 }
 
-// 获取外部链接
+// 获取外部链接（使用 POST search 接口）
 async function getLinks() {
   const config = getConfig();
   const data = await feishuRequest(
-    `/bitable/v1/apps/${config.appToken}/tables/${config.linkTableId}/records?page_size=200`
+    `/bitable/v1/apps/${config.appToken}/tables/${config.linkTableId}/records/search`,
+    { method: 'POST', body: JSON.stringify({ page_size: 200 }) }
   );
   const items = (data.items || [])
     .map(item => ({
       recordId: item.record_id,
-      ...item.fields,
+      ...cleanFields(item.fields),
     }))
     .sort((a, b) => (a['排序'] || 99) - (b['排序'] || 99));
   return items;
@@ -483,6 +677,144 @@ function PasswordModal({ onSuccess, onClose }) {
 }
 
 /* ==========================================================
+   组件：模块解锁密码弹窗
+   ========================================================== */
+
+function ModuleUnlockModal({ title, onSuccess, onClose }) {
+  const [pwd, setPwd] = useState('');
+  const [error, setError] = useState('');
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (inputRef.current) inputRef.current.focus();
+  }, []);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (checkLockPassword(pwd)) {
+      if (onSuccess) onSuccess();
+    } else {
+      setError('密码错误');
+      setPwd('');
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content password-modal module-lock-modal" onClick={e => e.stopPropagation()}>
+        <div className="password-icon">🔒</div>
+        <h2 className="password-title">{title || '模块已锁定'}</h2>
+        <p className="password-desc">输入解锁密码以访问此模块</p>
+        <form onSubmit={handleSubmit}>
+          <input
+            ref={inputRef}
+            type="password"
+            value={pwd}
+            onChange={e => { setPwd(e.target.value); setError(''); }}
+            placeholder="请输入解锁密码"
+            className="password-input"
+            autoComplete="off"
+          />
+          {error && <div className="password-error">{error}</div>}
+          <div className="modal-btns" style={{ marginTop: '20px' }}>
+            <button type="button" className="btn btn-secondary" onClick={onClose}>取消</button>
+            <button type="submit" className="btn btn-primary">解锁</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ==========================================================
+   组件：修改解锁密码弹窗
+   ========================================================== */
+
+function ChangeLockPasswordModal({ onSuccess, onClose }) {
+  const [oldPwd, setOldPwd] = useState('');
+  const [newPwd, setNewPwd] = useState('');
+  const [confirmPwd, setConfirmPwd] = useState('');
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (inputRef.current) inputRef.current.focus();
+  }, []);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setError('');
+    if (!checkLockPassword(oldPwd)) {
+      setError('旧密码错误');
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      setError('两次输入的新密码不一致');
+      return;
+    }
+    if (!newPwd) {
+      setError('新密码不能为空');
+      return;
+    }
+    setLockPassword(newPwd);
+    setSuccess(true);
+    setTimeout(() => {
+      if (onSuccess) onSuccess();
+    }, 800);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content password-modal module-lock-modal" onClick={e => e.stopPropagation()}>
+        <div className="password-icon">🔐</div>
+        <h2 className="password-title">修改解锁密码</h2>
+        <p className="password-desc">修改所有模块共用的解锁密码</p>
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: '12px' }}>
+            <input
+              ref={inputRef}
+              type="password"
+              value={oldPwd}
+              onChange={e => { setOldPwd(e.target.value); setError(''); }}
+              placeholder="旧密码"
+              className="password-input"
+              autoComplete="off"
+            />
+          </div>
+          <div style={{ marginBottom: '12px' }}>
+            <input
+              type="password"
+              value={newPwd}
+              onChange={e => { setNewPwd(e.target.value); setError(''); }}
+              placeholder="新密码"
+              className="password-input"
+              autoComplete="off"
+            />
+          </div>
+          <div style={{ marginBottom: '4px' }}>
+            <input
+              type="password"
+              value={confirmPwd}
+              onChange={e => { setConfirmPwd(e.target.value); setError(''); }}
+              placeholder="确认新密码"
+              className="password-input"
+              autoComplete="off"
+            />
+          </div>
+          {error && <div className="password-error">{error}</div>}
+          {success && <div style={{ color: 'var(--accent-green)', fontSize: '13px', marginTop: '8px' }}>密码修改成功</div>}
+          <div className="modal-btns" style={{ marginTop: '20px' }}>
+            <button type="button" className="btn btn-secondary" onClick={onClose}>取消</button>
+            <button type="submit" className="btn btn-primary" disabled={success}>确认修改</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ==========================================================
    组件：侧边栏
    ========================================================== */
 
@@ -490,6 +822,7 @@ function Sidebar({ onLock, modules, onModulesChange }) {
   const { path: locationPath } = useHashRoute();
   const location = { pathname: locationPath };
   const [unlocked, setUnlocked] = useState(isUnlocked());
+  const [showPwd, setShowPwd] = useState(false);
 
   useEffect(() => {
     const check = () => setUnlocked(isUnlocked());
@@ -502,6 +835,10 @@ function Sidebar({ onLock, modules, onModulesChange }) {
     setUnlocked(false);
     if (onLock) onLock();
   };
+
+  // 根据解锁状态过滤模块
+  const visibleModules = unlocked ? modules : modules.filter(m => !m.hidden);
+  const hasHiddenModules = modules.some(m => m.hidden);
 
   return (
     <aside className="sidebar">
@@ -523,12 +860,21 @@ function Sidebar({ onLock, modules, onModulesChange }) {
           <span>业务模块</span>
         </div>
 
-        {modules.map(m => (
+        {visibleModules.map(m => (
           <NavLink key={m.key} to={m.path} className="nav-item">
             <span className="nav-icon">{m.icon}</span>
-            <span className="nav-text">{m.key}</span>
+            <span className="nav-text">
+              {m.key}
+              {m.hidden && <span className="nav-lock-icon">🔒</span>}
+            </span>
           </NavLink>
         ))}
+        {hasHiddenModules && !unlocked && (
+          <div className="nav-item nav-hidden-trigger" onClick={() => setShowPwd(true)}>
+            <span className="nav-icon">🔒</span>
+            <span className="nav-text">显示隐藏模块</span>
+          </div>
+        )}
         <div className="nav-item nav-manage-btn" onClick={() => window.location.hash = '/module-manage'}>
           <span className="nav-icon">⚙️</span>
           <span className="nav-text">模块管理</span>
@@ -543,15 +889,1437 @@ function Sidebar({ onLock, modules, onModulesChange }) {
           {unlocked ? '点击锁定隐私数据' : '输入密码解锁隐藏数据'}
         </div>
       </div>
+
+      {showPwd && <PasswordModal onClose={() => setShowPwd(false)} onSuccess={() => { setUnlocked(true); setShowPwd(false); }} />}
     </aside>
   );
 }
 
 /* ==========================================================
-   组件：子页面通用模板
+   组件：财务模块
    ========================================================== */
 
-function ModulePage({ moduleName, icon, color }) {
+/* ==========================================================
+   财务模块（6分区完整版）
+   ========================================================== */
+
+function FinancePage() {
+  const [activeTab, setActiveTab] = React.useState('overview');
+  const [data, setData] = React.useState({ ledger: [], assets: [], income: [], loans: [], reminders: [] });
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState('');
+
+  // ===== 记账分区状态 =====
+  const [ledgerFilter, setLedgerFilter] = React.useState('all');
+  const [ledgerMonth, setLedgerMonth] = React.useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [showLedgerModal, setShowLedgerModal] = React.useState(false);
+  const [editingLedger, setEditingLedger] = React.useState(null);
+
+  // ===== 资产库分区状态 =====
+  const [assetFilter, setAssetFilter] = React.useState('all');
+  const [assetStatusFilter, setAssetStatusFilter] = React.useState('all');
+  const [showAssetModal, setShowAssetModal] = React.useState(false);
+  const [editingAsset, setEditingAsset] = React.useState(null);
+
+  // ===== 收入分区状态 =====
+  const [incomeTypeFilter, setIncomeTypeFilter] = React.useState('all');
+  const [incomeYear, setIncomeYear] = React.useState(new Date().getFullYear());
+  const [showIncomeModal, setShowIncomeModal] = React.useState(false);
+  const [editingIncome, setEditingIncome] = React.useState(null);
+
+  // ===== 贷负分区状态 =====
+  const [loanStatusFilter, setLoanStatusFilter] = React.useState('all');
+  const [showLoanModal, setShowLoanModal] = React.useState(false);
+  const [editingLoan, setEditingLoan] = React.useState(null);
+
+  // ===== 提醒分区状态 =====
+  const [reminderTypeFilter, setReminderTypeFilter] = React.useState('all');
+  const [reminderStatusFilter, setReminderStatusFilter] = React.useState('all');
+  const [showReminderModal, setShowReminderModal] = React.useState(false);
+  const [editingReminder, setEditingReminder] = React.useState(null);
+
+  const [submitting, setSubmitting] = React.useState(false);
+
+  const loadData = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const result = await fetchAllFinanceData();
+      setData(result);
+    } catch (e) {
+      setError('加载失败：' + (e.message || '未知错误'));
+    }
+    setLoading(false);
+  };
+
+  React.useEffect(() => { loadData(); }, []);
+
+  const changeMonth = (delta) => {
+    const [y, m] = ledgerMonth.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    setLedgerMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  };
+
+  // 贷款名称列表（用于记账关联贷款下拉）
+  const loanOptions = data.loans.map(l => l.fields['贷款名称']).filter(Boolean);
+  const assetOptions = data.assets.map(a => a.fields['物品名称']).filter(Boolean);
+  const accountOptions = ['现金', '银行卡', '支付宝', '微信', '信用卡', '其他'];
+  const categoryOptions = {
+    '收入': ['工资', '奖金', '投资收益', '兼职', '红包', '退款', '其他收入'],
+    '支出': ['餐饮', '交通', '购物', '住房', '娱乐', '医疗', '教育', '通讯', '日用品', '人情', '其他支出'],
+    '转账': ['银行卡转支付宝', '支付宝转银行卡', '微信转银行卡', '其他转账'],
+  };
+  const incomeTypeOptions = ['工资', '奖金', '投资收益', '兼职收入', '其他'];
+  const assetCategoryOptions = ['数码产品', '家具家电', '交通工具', '服饰鞋包', '收藏品', '生活用品', '其他'];
+  const assetStatusOptions = ['在用', '闲置', '已出售', '折旧中'];
+  const loanTypeOptions = ['房贷', '车贷', '消费贷', '其他'];
+  const loanStatusOptions = ['正常', '已结清', '逾期'];
+  const reminderTypeOptions = ['还款', '账单', '缴费', '其他'];
+  const reminderStatusOptions = ['启用', '已完成', '暂停'];
+  const repeatCycleOptions = ['每月', '每周', '不重复'];
+
+  // ========== 总览数据计算 ==========
+  const now = new Date();
+  const curMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  const monthStats = React.useMemo(() => {
+    return data.ledger.reduce((acc, r) => {
+      if (!r.fields['记录日期']) return acc;
+      const d = new Date(r.fields['记录日期']);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (ym !== curMonth) return acc;
+      const amount = Number(r.fields['金额']) || 0;
+      const type = r.fields['收支类型'];
+      if (type === '收入') acc.income += amount;
+      else if (type === '支出') acc.expense += amount;
+      return acc;
+    }, { income: 0, expense: 0 });
+  }, [data.ledger, curMonth]);
+
+  // 计入记账的工资收入
+  const salaryIncome = React.useMemo(() => {
+    return data.income
+      .filter(r => r.fields['是否计入记账'] === '是')
+      .reduce((sum, r) => {
+        if (!r.fields['到账日期']) return sum;
+        const d = new Date(r.fields['到账日期']);
+        const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        if (ym !== curMonth) return sum;
+        return sum + (Number(r.fields['金额']) || 0);
+      }, 0);
+  }, [data.income, curMonth]);
+
+  const totalAssets = data.assets.reduce((s, r) => s + (Number(r.fields['当前估值']) || 0), 0);
+  const totalLoanRemain = data.loans.reduce((s, r) => s + Math.max(0, (Number(r.fields['贷款总额']) || 0) - (Number(r.fields['已还本金']) || 0)), 0);
+  const netAssets = totalAssets - totalLoanRemain;
+
+  const overviewData = {
+    netAssets,
+    monthIncome: monthStats.income + salaryIncome,
+    monthExpense: monthStats.expense,
+    monthBalance: monthStats.income + salaryIncome - monthStats.expense,
+  };
+
+  // 支出分类饼图
+  const expenseByCategory = React.useMemo(() => {
+    const map = {};
+    data.ledger.forEach(r => {
+      if (r.fields['收支类型'] !== '支出') return;
+      if (!r.fields['记录日期']) return;
+      const d = new Date(r.fields['记录日期']);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (ym !== curMonth) return;
+      const cat = r.fields['分类'] || '其他';
+      map[cat] = (map[cat] || 0) + (Number(r.fields['金额']) || 0);
+    });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]);
+  }, [data.ledger, curMonth]);
+
+  const incomeByCategory = React.useMemo(() => {
+    const map = {};
+    data.ledger.forEach(r => {
+      if (r.fields['收支类型'] !== '收入') return;
+      if (!r.fields['记录日期']) return;
+      const d = new Date(r.fields['记录日期']);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (ym !== curMonth) return;
+      const cat = r.fields['分类'] || '其他';
+      map[cat] = (map[cat] || 0) + (Number(r.fields['金额']) || 0);
+    });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]);
+  }, [data.ledger, curMonth]);
+
+  // 饼图颜色
+  const pieColors = ['#f5c842', '#f87171', '#60a5fa', '#4ade80', '#c084fc', '#fb923c', '#38bdf8', '#a78bfa', '#fbbf24', '#4b5563'];
+  const makePieGradient = (dataArr) => {
+    const total = dataArr.reduce((s, [, v]) => s + v, 0);
+    if (total === 0) return 'rgba(255,255,255,0.05)';
+    let parts = [];
+    let acc = 0;
+    dataArr.forEach(([k, v], i) => {
+      const pct = (v / total) * 100;
+      const color = pieColors[i % pieColors.length];
+      parts.push(`${color} ${acc}% ${acc + pct}%`);
+      acc += pct;
+    });
+    return `conic-gradient(${parts.join(', ')})`;
+  };
+
+  // 近期提醒
+  const upcomingReminders = React.useMemo(() => {
+    return data.reminders
+      .filter(r => r.fields['状态'] === '启用')
+      .sort((a, b) => (a.fields['下次提醒日期'] || 0) - (b.fields['下次提醒日期'] || 0))
+      .slice(0, 5);
+  }, [data.reminders]);
+
+  // 进行中的贷款
+  const activeLoans = React.useMemo(() => {
+    return data.loans.filter(l => l.fields['状态'] === '正常' || l.fields['状态'] === '逾期');
+  }, [data.loans]);
+
+  // ========== 记账过滤 & 分组 ==========
+  const filteredLedger = React.useMemo(() => {
+    return data.ledger.filter(r => {
+      if (ledgerFilter !== 'all' && r.fields['收支类型'] !== 
+          (ledgerFilter === 'income' ? '收入' : ledgerFilter === 'expense' ? '支出' : '转账')) return false;
+      if (r.fields['记录日期']) {
+        const d = new Date(r.fields['记录日期']);
+        const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        if (ym !== ledgerMonth) return false;
+      }
+      return true;
+    }).sort((a, b) => (b.fields['记录日期'] || 0) - (a.fields['记录日期'] || 0));
+  }, [data.ledger, ledgerFilter, ledgerMonth]);
+
+  const groupedLedger = React.useMemo(() => {
+    const groups = {};
+    filteredLedger.forEach(r => {
+      const date = r.fields['记录日期'] ? formatDate(r.fields['记录日期']) : '未知日期';
+      if (!groups[date]) groups[date] = [];
+      groups[date].push(r);
+    });
+    return groups;
+  }, [filteredLedger]);
+
+  const ledgerMonthStats = React.useMemo(() => {
+    const stats = { income: 0, expense: 0 };
+    data.ledger.forEach(r => {
+      if (!r.fields['记录日期']) return;
+      const d = new Date(r.fields['记录日期']);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (ym !== ledgerMonth) return;
+      const amount = Number(r.fields['金额']) || 0;
+      const type = r.fields['收支类型'];
+      if (type === '收入') stats.income += amount;
+      else if (type === '支出') stats.expense += amount;
+    });
+    stats.balance = stats.income - stats.expense;
+    return stats;
+  }, [data.ledger, ledgerMonth]);
+
+  // ========== 资产库过滤 ==========
+  const filteredAssets = React.useMemo(() => {
+    return data.assets.filter(r => {
+      if (assetFilter !== 'all' && r.fields['分类'] !== assetFilter) return false;
+      if (assetStatusFilter !== 'all' && r.fields['状态'] !== assetStatusFilter) return false;
+      return true;
+    });
+  }, [data.assets, assetFilter, assetStatusFilter]);
+
+  const assetStats = React.useMemo(() => {
+    let totalCost = 0, totalValue = 0;
+    data.assets.forEach(r => {
+      totalCost += Number(r.fields['购入价格']) || 0;
+      totalValue += Number(r.fields['当前估值']) || 0;
+    });
+    return { totalCost, totalValue, profit: totalValue - totalCost };
+  }, [data.assets]);
+
+  // ========== 收入过滤 ==========
+  const filteredIncome = React.useMemo(() => {
+    return data.income.filter(r => {
+      if (incomeTypeFilter !== 'all' && r.fields['收入类型'] !== incomeTypeFilter) return false;
+      if (r.fields['到账日期']) {
+        const d = new Date(r.fields['到账日期']);
+        if (d.getFullYear() !== incomeYear) return false;
+      }
+      return true;
+    }).sort((a, b) => (b.fields['到账日期'] || 0) - (a.fields['到账日期'] || 0));
+  }, [data.income, incomeTypeFilter, incomeYear]);
+
+  const incomeStats = React.useMemo(() => {
+    let yearTotal = 0, monthTotal = 0, count = 0;
+    const curM = new Date().getMonth();
+    const curY = new Date().getFullYear();
+    data.income.forEach(r => {
+      const amount = Number(r.fields['金额']) || 0;
+      if (r.fields['到账日期']) {
+        const d = new Date(r.fields['到账日期']);
+        if (d.getFullYear() === incomeYear) { yearTotal += amount; count++; }
+        if (d.getFullYear() === curY && d.getMonth() === curM) monthTotal += amount;
+      }
+    });
+    return { yearTotal, monthTotal, avgMonth: count > 0 ? Math.round(yearTotal / 12) : 0 };
+  }, [data.income, incomeYear]);
+
+  const groupedIncome = React.useMemo(() => {
+    const groups = {};
+    filteredIncome.forEach(r => {
+      const d = r.fields['到账日期'] ? new Date(r.fields['到账日期']) : null;
+      const key = d ? `${d.getFullYear()}年${d.getMonth() + 1}月` : '未设置日期';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(r);
+    });
+    return groups;
+  }, [filteredIncome]);
+
+  // ========== 贷负过滤 ==========
+  const filteredLoans = React.useMemo(() => {
+    return data.loans.filter(r => {
+      if (loanStatusFilter !== 'all' && r.fields['状态'] !== loanStatusFilter) return false;
+      return true;
+    });
+  }, [data.loans, loanStatusFilter]);
+
+  const loanStats = React.useMemo(() => {
+    let total = 0, paid = 0, remain = 0, monthly = 0;
+    data.loans.forEach(r => {
+      total += Number(r.fields['贷款总额']) || 0;
+      paid += Number(r.fields['已还本金']) || 0;
+      remain += Math.max(0, (Number(r.fields['贷款总额']) || 0) - (Number(r.fields['已还本金']) || 0));
+      if (r.fields['状态'] === '正常' || r.fields['状态'] === '逾期') {
+        monthly += Number(r.fields['月还款额']) || 0;
+      }
+    });
+    return { total, paid, remain, monthly };
+  }, [data.loans]);
+
+  // ========== 提醒过滤 ==========
+  const filteredReminders = React.useMemo(() => {
+    return data.reminders.filter(r => {
+      if (reminderTypeFilter !== 'all' && r.fields['提醒类型'] !== reminderTypeFilter) return false;
+      if (reminderStatusFilter !== 'all' && r.fields['状态'] !== reminderStatusFilter) return false;
+      return true;
+    }).sort((a, b) => (a.fields['下次提醒日期'] || 0) - (b.fields['下次提醒日期'] || 0));
+  }, [data.reminders, reminderTypeFilter, reminderStatusFilter]);
+
+  const reminderStats = React.useMemo(() => {
+    const now = Date.now();
+    const soon = now + 7 * 24 * 3600 * 1000;
+    let upcoming = 0, overdue = 0, total = data.reminders.length;
+    data.reminders.forEach(r => {
+      if (r.fields['状态'] !== '启用') return;
+      const t = r.fields['下次提醒日期'] || 0;
+      if (t < now) overdue++;
+      else if (t <= soon) upcoming++;
+    });
+    return { upcoming, overdue, total };
+  }, [data.reminders]);
+
+  // ========== 通用 CRUD ==========
+  const handleCreate = async (tableKey, fields) => {
+    setSubmitting(true);
+    try {
+      await createRecordByTable(FINANCE_CONFIG.appToken, FINANCE_CONFIG.tables[tableKey], fields);
+      await loadData();
+    } catch (e) {
+      alert('操作失败：' + (e.message || '未知错误'));
+    }
+    setSubmitting(false);
+  };
+
+  const handleUpdate = async (tableKey, recordId, fields) => {
+    setSubmitting(true);
+    try {
+      await updateRecordByTable(FINANCE_CONFIG.appToken, FINANCE_CONFIG.tables[tableKey], recordId, fields);
+      await loadData();
+    } catch (e) {
+      alert('操作失败：' + (e.message || '未知错误'));
+    }
+    setSubmitting(false);
+  };
+
+  const handleDelete = async (tableKey, recordId) => {
+    if (!confirm('确定要删除这条记录吗？')) return;
+    try {
+      await deleteRecordByTable(FINANCE_CONFIG.appToken, FINANCE_CONFIG.tables[tableKey], recordId);
+      await loadData();
+    } catch (e) {
+      alert('删除失败：' + (e.message || '未知错误'));
+    }
+  };
+
+  // ========== 记账表单 ==========
+  const openLedgerModal = (record = null) => {
+    setEditingLedger(record);
+    setShowLedgerModal(true);
+  };
+
+  const submitLedger = (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const fields = {
+      '记录日期': fd.get('记录日期') ? new Date(fd.get('记录日期')).getTime() : Date.now(),
+      '收支类型': fd.get('收支类型'),
+      '金额': Number(fd.get('金额')) || 0,
+      '分类': fd.get('分类') || '',
+      '关联账户': fd.get('关联账户') || '',
+      '备注': fd.get('备注') || '',
+      '关联贷款': fd.get('关联贷款') || '',
+      '关联资产': fd.get('关联资产') || '',
+    };
+    if (editingLedger) {
+      handleUpdate('ledger', editingLedger.record_id, fields);
+    } else {
+      handleCreate('ledger', fields);
+    }
+    setShowLedgerModal(false);
+    setEditingLedger(null);
+  };
+
+  // ========== 资产表单 ==========
+  const openAssetModal = (record = null) => {
+    setEditingAsset(record);
+    setShowAssetModal(true);
+  };
+
+  const submitAsset = (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const fields = {
+      '物品名称': fd.get('物品名称') || '',
+      '分类': fd.get('分类') || '',
+      '购入价格': Number(fd.get('购入价格')) || 0,
+      '购入日期': fd.get('购入日期') ? new Date(fd.get('购入日期')).getTime() : Date.now(),
+      '当前估值': Number(fd.get('当前估值')) || 0,
+      '状态': fd.get('状态') || '在用',
+      '折旧年限': Number(fd.get('折旧年限')) || 0,
+      '购买渠道': fd.get('购买渠道') || '',
+      '备注': fd.get('备注') || '',
+    };
+    if (editingAsset) {
+      handleUpdate('assets', editingAsset.record_id, fields);
+    } else {
+      handleCreate('assets', fields);
+    }
+    setShowAssetModal(false);
+    setEditingAsset(null);
+  };
+
+  // ========== 收入表单 ==========
+  const openIncomeModal = (record = null) => {
+    setEditingIncome(record);
+    setShowIncomeModal(true);
+  };
+
+  const submitIncome = (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const fields = {
+      '收入名称': fd.get('收入名称') || '',
+      '收入类型': fd.get('收入类型') || '',
+      '金额': Number(fd.get('金额')) || 0,
+      '到账日期': fd.get('到账日期') ? new Date(fd.get('到账日期')).getTime() : Date.now(),
+      '来源': fd.get('来源') || '',
+      '是否计入记账': fd.get('是否计入记账') || '是',
+      '备注': fd.get('备注') || '',
+    };
+    if (editingIncome) {
+      handleUpdate('income', editingIncome.record_id, fields);
+    } else {
+      handleCreate('income', fields);
+    }
+    setShowIncomeModal(false);
+    setEditingIncome(null);
+  };
+
+  // ========== 贷款表单 ==========
+  const openLoanModal = (record = null) => {
+    setEditingLoan(record);
+    setShowLoanModal(true);
+  };
+
+  const submitLoan = (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const fields = {
+      '贷款名称': fd.get('贷款名称') || '',
+      '类型': fd.get('类型') || '',
+      '贷款总额': Number(fd.get('贷款总额')) || 0,
+      '已还本金': Number(fd.get('已还本金')) || 0,
+      '年利率': Number(fd.get('年利率')) || 0,
+      '月还款额': Number(fd.get('月还款额')) || 0,
+      '总期数': Number(fd.get('总期数')) || 0,
+      '已还期数': Number(fd.get('已还期数')) || 0,
+      '放款日期': fd.get('放款日期') ? new Date(fd.get('放款日期')).getTime() : Date.now(),
+      '还款日': Number(fd.get('还款日')) || 1,
+      '还款账户': fd.get('还款账户') || '',
+      '状态': fd.get('状态') || '正常',
+      '备注': fd.get('备注') || '',
+    };
+    if (editingLoan) {
+      handleUpdate('loans', editingLoan.record_id, fields);
+    } else {
+      handleCreate('loans', fields);
+    }
+    setShowLoanModal(false);
+    setEditingLoan(null);
+  };
+
+  // ========== 提醒表单 ==========
+  const openReminderModal = (record = null) => {
+    setEditingReminder(record);
+    setShowReminderModal(true);
+  };
+
+  const submitReminder = (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const fields = {
+      '提醒标题': fd.get('提醒标题') || '',
+      '提醒类型': fd.get('提醒类型') || '',
+      '金额': Number(fd.get('金额')) || 0,
+      '下次提醒日期': fd.get('下次提醒日期') ? new Date(fd.get('下次提醒日期')).getTime() : Date.now(),
+      '重复周期': fd.get('重复周期') || '不重复',
+      '关联贷款': fd.get('关联贷款') || '',
+      '状态': fd.get('状态') || '启用',
+      '备注': fd.get('备注') || '',
+    };
+    if (editingReminder) {
+      handleUpdate('reminders', editingReminder.record_id, fields);
+    } else {
+      handleCreate('reminders', fields);
+    }
+    setShowReminderModal(false);
+    setEditingReminder(null);
+  };
+
+  const markReminderDone = async (record) => {
+    const fields = { ...record.fields, '状态': '已完成' };
+    handleUpdate('reminders', record.record_id, fields);
+  };
+
+  // ========== 工具函数 ==========
+  const fmtMoney = (n) => {
+    const num = Number(n) || 0;
+    return (num >= 0 ? '' : '-') + '¥' + Math.abs(num).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  const fmtShortMoney = (n) => {
+    const num = Number(n) || 0;
+    const abs = Math.abs(num);
+    if (abs >= 10000) return (num / 10000).toFixed(1) + '万';
+    if (abs >= 1000) return (num / 1000).toFixed(1) + 'k';
+    return num.toFixed(0);
+  };
+
+  const todayStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  };
+
+  const fieldToDateStr = (val) => {
+    if (!val) return '';
+    const d = new Date(val);
+    if (isNaN(d)) return '';
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  };
+
+  const isReminderUrgent = (record) => {
+    if (record.fields['状态'] !== '启用') return false;
+    const t = record.fields['下次提醒日期'] || 0;
+    return t < Date.now() || t - Date.now() < 7 * 24 * 3600 * 1000;
+  };
+
+  // ========== 渲染 ==========
+  if (loading) {
+    return (
+      <div className="finance-page">
+        <div className="finance-loading">加载中...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="finance-page">
+        <div style={{padding:'40px', textAlign:'center', color:'#f87171'}}>
+          {error}
+          <div style={{marginTop:'16px'}}>
+            <button className="finance-btn primary" onClick={loadData}>重试</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const tabs = [
+    { key: 'overview', label: '总览', icon: '📊' },
+    { key: 'ledger', label: '记账', icon: '📝' },
+    { key: 'assets', label: '资产库', icon: '📦' },
+    { key: 'income', label: '收入', icon: '💰' },
+    { key: 'loans', label: '贷负', icon: '🏦' },
+    { key: 'reminders', label: '提醒', icon: '🔔' },
+  ];
+
+  return (
+    <div className="finance-page">
+      {/* Tabs */}
+      <div className="finance-tabs">
+        {tabs.map(t => (
+          <div
+            key={t.key}
+            className={'finance-tab' + (activeTab === t.key ? ' active' : '')}
+            onClick={() => setActiveTab(t.key)}
+          >
+            <span style={{marginRight:'6px'}}>{t.icon}</span>{t.label}
+          </div>
+        ))}
+      </div>
+
+      <div className="finance-content">
+        {/* ========== 总览分区 ========== */}
+        {activeTab === 'overview' && (
+          <div>
+            <div className="overview-grid">
+              <div className="stat-card stat-net">
+                <div className="stat-label">净资产</div>
+                <div className="stat-value">{fmtMoney(overviewData.netAssets)}</div>
+                <div className="stat-sub">资产估值 - 剩余贷款</div>
+              </div>
+              <div className="stat-card stat-income">
+                <div className="stat-label">本月收入</div>
+                <div className="stat-value">{fmtMoney(overviewData.monthIncome)}</div>
+                <div className="stat-sub">含计入记账的工资收入</div>
+              </div>
+              <div className="stat-card stat-expense">
+                <div className="stat-label">本月支出</div>
+                <div className="stat-value">{fmtMoney(overviewData.monthExpense)}</div>
+                <div className="stat-sub">所有支出类记录</div>
+              </div>
+              <div className="stat-card stat-balance">
+                <div className="stat-label">本月结余</div>
+                <div className="stat-value">{fmtMoney(overviewData.monthBalance)}</div>
+                <div className="stat-sub" style={{color: overviewData.monthBalance >= 0 ? '#4ade80' : '#f87171'}}>
+                  {overviewData.monthBalance >= 0 ? '正现金流 ✓' : '赤字 ⚠'}
+                </div>
+              </div>
+            </div>
+
+            <div className="chart-section">
+              <div className="chart-card">
+                <div className="chart-title">本月支出构成</div>
+                {expenseByCategory.length === 0 ? (
+                  <div className="chart-empty">暂无支出记录</div>
+                ) : (
+                  <div className="pie-chart-wrap">
+                    <div className="pie-chart" style={{background: makePieGradient(expenseByCategory)}}></div>
+                    <div className="pie-legend">
+                      {expenseByCategory.slice(0, 6).map(([k, v], i) => (
+                        <div key={k} className="pie-legend-item">
+                          <span className="pie-legend-dot" style={{background: pieColors[i % pieColors.length]}}></span>
+                          <span>{k}</span>
+                          <span className="pie-legend-value">{fmtShortMoney(v)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="chart-card">
+                <div className="chart-title">本月收入构成</div>
+                {incomeByCategory.length === 0 ? (
+                  <div className="chart-empty">暂无收入记录</div>
+                ) : (
+                  <div className="pie-chart-wrap">
+                    <div className="pie-chart" style={{background: makePieGradient(incomeByCategory)}}></div>
+                    <div className="pie-legend">
+                      {incomeByCategory.slice(0, 6).map(([k, v], i) => (
+                        <div key={k} className="pie-legend-item">
+                          <span className="pie-legend-dot" style={{background: pieColors[i % pieColors.length]}}></span>
+                          <span>{k}</span>
+                          <span className="pie-legend-value">{fmtShortMoney(v)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {activeLoans.length > 0 && (
+              <div className="loan-section">
+                <div className="chart-title">贷款进度</div>
+                <div className="loan-progress">
+                  {activeLoans.map(loan => {
+                    const total = Number(loan.fields['总期数']) || 1;
+                    const paid = Number(loan.fields['已还期数']) || 0;
+                    const remain = Math.max(0, (Number(loan.fields['贷款总额']) || 0) - (Number(loan.fields['已还本金']) || 0));
+                    const pct = Math.min(100, Math.round((paid / total) * 100));
+                    return (
+                      <div key={loan.record_id} className="loan-card">
+                        <div className="loan-name">{loan.fields['贷款名称']}</div>
+                        <div className="loan-meta">
+                          <span>{paid} / {total} 期</span>
+                          <span>{pct}%</span>
+                        </div>
+                        <div className="loan-bar-bg">
+                          <div className="loan-bar-fill" style={{width: pct + '%'}}></div>
+                        </div>
+                        <div className="loan-remain">剩余本金 {fmtMoney(remain)} · 月供 {fmtMoney(loan.fields['月还款额'])}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {upcomingReminders.length > 0 && (
+              <div className="reminder-section">
+                <div className="chart-title">近期提醒</div>
+                <div className="reminder-list">
+                  {upcomingReminders.map(r => (
+                    <div key={r.record_id} className="reminder-item" style={isReminderUrgent(r) ? {borderColor: 'rgba(248,113,113,0.3)', background: 'rgba(248,113,113,0.05)'} : {}}>
+                      <span className="reminder-type">{r.fields['提醒类型']}</span>
+                      <span className="reminder-title">{r.fields['提醒标题']}</span>
+                      <span className="reminder-date">{formatDate(r.fields['下次提醒日期'])}</span>
+                      <span className="reminder-amount">{fmtMoney(r.fields['金额'])}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ========== 记账分区 ========== */}
+        {activeTab === 'ledger' && (
+          <div>
+            <div className="record-toolbar">
+              <div className="record-filter-group">
+                {[['all','全部'],['income','收入'],['expense','支出'],['transfer','转账']].map(([k,v]) => (
+                  <button key={k} className={'record-filter-btn' + (ledgerFilter === k ? ' active' : '')} onClick={() => setLedgerFilter(k)}>{v}</button>
+                ))}
+              </div>
+              <button className="finance-btn primary" onClick={() => openLedgerModal()}>+ 新增记录</button>
+              <div className="month-selector">
+                <button className="month-btn" onClick={() => changeMonth(-1)}>‹</button>
+                <span className="month-label">{ledgerMonth}</span>
+                <button className="month-btn" onClick={() => changeMonth(1)}>›</button>
+              </div>
+            </div>
+
+            <div className="record-summary">
+              <div className="record-summary-item">
+                <div className="record-summary-label">本月收入</div>
+                <div className="record-summary-value income">{fmtMoney(ledgerMonthStats.income)}</div>
+              </div>
+              <div className="record-summary-item">
+                <div className="record-summary-label">本月支出</div>
+                <div className="record-summary-value expense">{fmtMoney(ledgerMonthStats.expense)}</div>
+              </div>
+              <div className="record-summary-item">
+                <div className="record-summary-label">本月结余</div>
+                <div className="record-summary-value balance">{fmtMoney(ledgerMonthStats.balance)}</div>
+              </div>
+            </div>
+
+            {filteredLedger.length === 0 ? (
+              <div className="record-empty">暂无记录</div>
+            ) : (
+              <div className="record-list">
+                {Object.entries(groupedLedger).map(([date, items]) => (
+                  <div key={date} className="record-date-group">
+                    <div className="record-date-header">
+                      <span>{date}</span>
+                      <span className="record-date-total">
+                        {items.filter(i => i.fields['收支类型'] === '收入').reduce((s,i) => s + (Number(i.fields['金额'])||0), 0) > 0 && (
+                          <span style={{color:'#4ade80', marginRight:'12px'}}>+{fmtMoney(items.filter(i=>i.fields['收支类型']==='收入').reduce((s,i)=>s+(Number(i.fields['金额'])||0),0))}</span>
+                        )}
+                        {items.filter(i => i.fields['收支类型'] === '支出').reduce((s,i) => s + (Number(i.fields['金额'])||0), 0) > 0 && (
+                          <span style={{color:'#f87171'}}>-{fmtMoney(items.filter(i=>i.fields['收支类型']==='支出').reduce((s,i)=>s+(Number(i.fields['金额'])||0),0))}</span>
+                        )}
+                      </span>
+                    </div>
+                    {items.map(r => (
+                      <div key={r.record_id} className="record-item">
+                        <div className="record-left">
+                          <div className="record-category">{r.fields['分类'] || '未分类'}</div>
+                          {r.fields['备注'] && <div className="record-note">{r.fields['备注']}</div>}
+                        </div>
+                        <div className="record-center">
+                          <span className={'record-type-tag ' + (r.fields['收支类型'] === '收入' ? 'income' : r.fields['收支类型'] === '支出' ? 'expense' : 'transfer')}>{r.fields['收支类型']}</span>
+                          {r.fields['关联账户'] && <span className="record-account">{r.fields['关联账户']}</span>}
+                        </div>
+                        <div className="record-right">
+                          <span className={'record-amount ' + (r.fields['收支类型'] === '收入' ? 'income' : r.fields['收支类型'] === '支出' ? 'expense' : 'transfer')}>
+                            {r.fields['收支类型'] === '收入' ? '+' : r.fields['收支类型'] === '支出' ? '-' : ''}{fmtMoney(r.fields['金额'])}
+                          </span>
+                          <div className="record-actions">
+                            <button className="record-action-btn" title="编辑" onClick={() => openLedgerModal(r)}>✎</button>
+                            <button className="record-action-btn danger" title="删除" onClick={() => handleDelete('ledger', r.record_id)}>✕</button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ========== 资产库分区 ========== */}
+        {activeTab === 'assets' && (
+          <div>
+            <div className="record-toolbar">
+              <div className="record-filter-group">
+                <button className={'record-filter-btn' + (assetFilter === 'all' ? ' active' : '')} onClick={() => setAssetFilter('all')}>全部分类</button>
+                {assetCategoryOptions.map(c => (
+                  <button key={c} className={'record-filter-btn' + (assetFilter === c ? ' active' : '')} onClick={() => setAssetFilter(c)}>{c}</button>
+                ))}
+              </div>
+              <div style={{display:'flex', gap:'4px'}}>
+                <select className="finance-form-select" style={{width:'auto', padding:'6px 10px'}} value={assetStatusFilter} onChange={e => setAssetStatusFilter(e.target.value)}>
+                  <option value="all">全部状态</option>
+                  {assetStatusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <button className="finance-btn primary" style={{marginLeft:'auto'}} onClick={() => openAssetModal()}>+ 新增资产</button>
+            </div>
+
+            <div className="record-summary">
+              <div className="record-summary-item">
+                <div className="record-summary-label">总估值</div>
+                <div className="record-summary-value" style={{color:'#f5c842'}}>{fmtMoney(assetStats.totalValue)}</div>
+              </div>
+              <div className="record-summary-item">
+                <div className="record-summary-label">总购入价</div>
+                <div className="record-summary-value" style={{color:'#60a5fa'}}>{fmtMoney(assetStats.totalCost)}</div>
+              </div>
+              <div className="record-summary-item">
+                <div className="record-summary-label">总盈亏</div>
+                <div className={'record-summary-value ' + (assetStats.profit >= 0 ? 'income' : 'expense')}>
+                  {assetStats.profit >= 0 ? '+' : ''}{fmtMoney(assetStats.profit)}
+                </div>
+              </div>
+            </div>
+
+            {filteredAssets.length === 0 ? (
+              <div className="record-empty">暂无资产记录</div>
+            ) : (
+              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:'14px'}}>
+                {filteredAssets.map(a => {
+                  const val = Number(a.fields['当前估值']) || 0;
+                  const cost = Number(a.fields['购入价格']) || 0;
+                  const profit = val - cost;
+                  const profitPct = cost > 0 ? Math.round(profit / cost * 100) : 0;
+                  return (
+                    <div key={a.record_id} className="loan-card" style={{position:'relative'}}>
+                      <div style={{position:'absolute', top:'12px', right:'12px', display:'flex', gap:'4px'}}>
+                        <button className="record-action-btn" onClick={() => openAssetModal(a)}>✎</button>
+                        <button className="record-action-btn danger" onClick={() => handleDelete('assets', a.record_id)}>✕</button>
+                      </div>
+                      <div className="loan-name">{a.fields['物品名称']}</div>
+                      <div style={{display:'flex', gap:'8px', marginBottom:'10px'}}>
+                        <span className="record-type-tag income">{a.fields['分类']}</span>
+                        <span className="record-type-tag transfer">{a.fields['状态']}</span>
+                      </div>
+                      <div style={{display:'flex', justifyContent:'space-between', fontSize:'12px', color:'#888', marginBottom:'4px'}}>
+                        <span>购入价</span><span style={{fontFamily:'monospace', color:'#aaa'}}>{fmtMoney(cost)}</span>
+                      </div>
+                      <div style={{display:'flex', justifyContent:'space-between', fontSize:'12px', color:'#888', marginBottom:'4px'}}>
+                        <span>当前估值</span><span style={{fontFamily:'monospace', color:'#f5c842', fontWeight:500}}>{fmtMoney(val)}</span>
+                      </div>
+                      <div style={{display:'flex', justifyContent:'space-between', fontSize:'12px', paddingTop:'8px', borderTop:'1px solid rgba(255,255,255,0.06)'}}>
+                        <span>盈亏</span>
+                        <span style={{fontFamily:'monospace', fontWeight:500, color: profit >= 0 ? '#4ade80' : '#f87171'}}>
+                          {profit >= 0 ? '+' : ''}{fmtMoney(profit)} ({profitPct}%)
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ========== 收入分区 ========== */}
+        {activeTab === 'income' && (
+          <div>
+            <div className="record-toolbar">
+              <div className="record-filter-group">
+                <button className={'record-filter-btn' + (incomeTypeFilter === 'all' ? ' active' : '')} onClick={() => setIncomeTypeFilter('all')}>全部</button>
+                {incomeTypeOptions.map(t => (
+                  <button key={t} className={'record-filter-btn' + (incomeTypeFilter === t ? ' active' : '')} onClick={() => setIncomeTypeFilter(t)}>{t}</button>
+                ))}
+              </div>
+              <div style={{display:'flex', alignItems:'center', gap:'8px', marginLeft:'auto'}}>
+                <button className="month-btn" onClick={() => setIncomeYear(y => y - 1)}>‹</button>
+                <span className="month-label">{incomeYear}年</span>
+                <button className="month-btn" onClick={() => setIncomeYear(y => y + 1)}>›</button>
+              </div>
+              <button className="finance-btn primary" onClick={() => openIncomeModal()}>+ 新增收入</button>
+            </div>
+
+            <div className="record-summary">
+              <div className="record-summary-item">
+                <div className="record-summary-label">本年总收入</div>
+                <div className="record-summary-value income">{fmtMoney(incomeStats.yearTotal)}</div>
+              </div>
+              <div className="record-summary-item">
+                <div className="record-summary-label">本月收入</div>
+                <div className="record-summary-value" style={{color:'#f5c842'}}>{fmtMoney(incomeStats.monthTotal)}</div>
+              </div>
+              <div className="record-summary-item">
+                <div className="record-summary-label">月均收入</div>
+                <div className="record-summary-value balance">{fmtMoney(incomeStats.avgMonth)}</div>
+              </div>
+            </div>
+
+            {filteredIncome.length === 0 ? (
+              <div className="record-empty">暂无收入记录</div>
+            ) : (
+              <div className="record-list">
+                {Object.entries(groupedIncome).map(([month, items]) => (
+                  <div key={month} className="record-date-group">
+                    <div className="record-date-header">
+                      <span>{month}</span>
+                      <span className="record-date-total" style={{color:'#4ade80'}}>+{fmtMoney(items.reduce((s,i)=>s+(Number(i.fields['金额'])||0),0))}</span>
+                    </div>
+                    {items.map(r => (
+                      <div key={r.record_id} className="record-item">
+                        <div className="record-left">
+                          <div className="record-category">{r.fields['收入名称']}</div>
+                          {r.fields['来源'] && <div className="record-note">{r.fields['来源']} · {r.fields['收入类型']}</div>}
+                        </div>
+                        <div className="record-center">
+                          <span className={'record-type-tag ' + (r.fields['是否计入记账'] === '是' ? 'income' : 'transfer')}>
+                            {r.fields['是否计入记账'] === '是' ? '计入记账' : '不计入'}
+                          </span>
+                        </div>
+                        <div className="record-right">
+                          <span className="record-amount income">+{fmtMoney(r.fields['金额'])}</span>
+                          <div className="record-actions">
+                            <button className="record-action-btn" onClick={() => openIncomeModal(r)}>✎</button>
+                            <button className="record-action-btn danger" onClick={() => handleDelete('income', r.record_id)}>✕</button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ========== 贷负分区 ========== */}
+        {activeTab === 'loans' && (
+          <div>
+            <div className="record-toolbar">
+              <div className="record-filter-group">
+                <button className={'record-filter-btn' + (loanStatusFilter === 'all' ? ' active' : '')} onClick={() => setLoanStatusFilter('all')}>全部</button>
+                {loanStatusOptions.map(s => (
+                  <button key={s} className={'record-filter-btn' + (loanStatusFilter === s ? ' active' : '')} onClick={() => setLoanStatusFilter(s)}>{s}</button>
+                ))}
+              </div>
+              <button className="finance-btn primary" style={{marginLeft:'auto'}} onClick={() => openLoanModal()}>+ 新增贷款</button>
+            </div>
+
+            <div className="record-summary">
+              <div className="record-summary-item">
+                <div className="record-summary-label">贷款总额</div>
+                <div className="record-summary-value expense">{fmtMoney(loanStats.total)}</div>
+              </div>
+              <div className="record-summary-item">
+                <div className="record-summary-label">已还本金</div>
+                <div className="record-summary-value" style={{color:'#4ade80'}}>{fmtMoney(loanStats.paid)}</div>
+              </div>
+              <div className="record-summary-item">
+                <div className="record-summary-label">剩余本金</div>
+                <div className="record-summary-value" style={{color:'#f87171'}}>{fmtMoney(loanStats.remain)}</div>
+              </div>
+              <div className="record-summary-item">
+                <div className="record-summary-label">月供合计</div>
+                <div className="record-summary-value balance">{fmtMoney(loanStats.monthly)}</div>
+              </div>
+            </div>
+
+            {filteredLoans.length === 0 ? (
+              <div className="record-empty">暂无贷款记录</div>
+            ) : (
+              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))', gap:'16px'}}>
+                {filteredLoans.map(l => {
+                  const total = Number(l.fields['总期数']) || 1;
+                  const paidPeriods = Number(l.fields['已还期数']) || 0;
+                  const pct = Math.min(100, Math.round((paidPeriods / total) * 100));
+                  const remainPrincipal = Math.max(0, (Number(l.fields['贷款总额']) || 0) - (Number(l.fields['已还本金']) || 0));
+                  const isOverdue = l.fields['状态'] === '逾期';
+                  return (
+                    <div key={l.record_id} className="loan-card" style={isOverdue ? {borderColor:'rgba(248,113,113,0.3)'} : {}}>
+                      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px'}}>
+                        <div className="loan-name" style={{marginBottom:0}}>{l.fields['贷款名称']}</div>
+                        <span className={'record-type-tag ' + (isOverdue ? 'expense' : l.fields['状态'] === '已结清' ? 'transfer' : 'income')}>{l.fields['状态']}</span>
+                      </div>
+                      <div className="loan-meta">
+                        <span>{l.fields['类型']} · 年利率 {l.fields['年利率']}%</span>
+                        <span>{paidPeriods}/{total}期 ({pct}%)</span>
+                      </div>
+                      <div className="loan-bar-bg">
+                        <div className="loan-bar-fill" style={{width: pct + '%', background: isOverdue ? 'linear-gradient(90deg,#f87171,#ef4444)' : undefined}}></div>
+                      </div>
+                      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginTop:'12px', fontSize:'12px'}}>
+                        <div>
+                          <div style={{color:'#888', marginBottom:'2px'}}>贷款总额</div>
+                          <div style={{fontFamily:'monospace', color:'#f87171'}}>{fmtMoney(l.fields['贷款总额'])}</div>
+                        </div>
+                        <div>
+                          <div style={{color:'#888', marginBottom:'2px'}}>已还本金</div>
+                          <div style={{fontFamily:'monospace', color:'#4ade80'}}>{fmtMoney(l.fields['已还本金'])}</div>
+                        </div>
+                        <div>
+                          <div style={{color:'#888', marginBottom:'2px'}}>剩余本金</div>
+                          <div style={{fontFamily:'monospace', color:'#f5c842'}}>{fmtMoney(remainPrincipal)}</div>
+                        </div>
+                        <div>
+                          <div style={{color:'#888', marginBottom:'2px'}}>月还款额</div>
+                          <div style={{fontFamily:'monospace', color:'#60a5fa'}}>{fmtMoney(l.fields['月还款额'])}</div>
+                        </div>
+                      </div>
+                      <div style={{display:'flex', justifyContent:'space-between', fontSize:'11px', color:'#666', marginTop:'12px', paddingTop:'10px', borderTop:'1px solid rgba(255,255,255,0.06)'}}>
+                        <span>还款日：每月{l.fields['还款日']}号 · {l.fields['还款账户'] || '-'}</span>
+                        <div style={{display:'flex', gap:'4px'}}>
+                          <button className="record-action-btn" onClick={() => openLoanModal(l)}>✎</button>
+                          <button className="record-action-btn danger" onClick={() => handleDelete('loans', l.record_id)}>✕</button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ========== 提醒分区 ========== */}
+        {activeTab === 'reminders' && (
+          <div>
+            <div className="record-toolbar">
+              <div className="record-filter-group">
+                <button className={'record-filter-btn' + (reminderTypeFilter === 'all' ? ' active' : '')} onClick={() => setReminderTypeFilter('all')}>全部类型</button>
+                {reminderTypeOptions.map(t => (
+                  <button key={t} className={'record-filter-btn' + (reminderTypeFilter === t ? ' active' : '')} onClick={() => setReminderTypeFilter(t)}>{t}</button>
+                ))}
+              </div>
+              <div style={{display:'flex', gap:'4px'}}>
+                {reminderStatusOptions.map(s => (
+                  <button key={s} className={'record-filter-btn' + (reminderStatusFilter === s ? ' active' : '')} onClick={() => setReminderStatusFilter(s)}>{s}</button>
+                ))}
+              </div>
+              <button className="finance-btn primary" style={{marginLeft:'auto'}} onClick={() => openReminderModal()}>+ 新增提醒</button>
+            </div>
+
+            <div className="record-summary">
+              <div className="record-summary-item">
+                <div className="record-summary-label">即将到期（7天内）</div>
+                <div className="record-summary-value" style={{color:'#f5c842'}}>{reminderStats.upcoming}</div>
+              </div>
+              <div className="record-summary-item">
+                <div className="record-summary-label">已逾期</div>
+                <div className="record-summary-value expense">{reminderStats.overdue}</div>
+              </div>
+              <div className="record-summary-item">
+                <div className="record-summary-label">提醒总数</div>
+                <div className="record-summary-value balance">{reminderStats.total}</div>
+              </div>
+            </div>
+
+            {filteredReminders.length === 0 ? (
+              <div className="record-empty">暂无提醒</div>
+            ) : (
+              <div className="reminder-list">
+                {filteredReminders.map(r => {
+                  const urgent = isReminderUrgent(r);
+                  return (
+                    <div key={r.record_id} className="reminder-item" style={urgent ? {borderColor:'rgba(248,113,113,0.3)', background:'rgba(248,113,113,0.05)'} : {}}>
+                      <span className="reminder-type">{r.fields['提醒类型']}</span>
+                      <span className="reminder-title">{r.fields['提醒标题']}</span>
+                      <span className="reminder-date">{formatDate(r.fields['下次提醒日期'])}</span>
+                      <span style={{fontSize:'11px', padding:'2px 8px', borderRadius:'4px', background:'rgba(255,255,255,0.06)', color:'#888'}}>{r.fields['重复周期']}</span>
+                      <span className="reminder-amount">{fmtMoney(r.fields['金额'])}</span>
+                      <div style={{display:'flex', gap:'4px', flexShrink:0}}>
+                        {r.fields['状态'] === '启用' && (
+                          <button className="record-action-btn" title="标记完成" onClick={() => markReminderDone(r)}>✓</button>
+                        )}
+                        <button className="record-action-btn" title="编辑" onClick={() => openReminderModal(r)}>✎</button>
+                        <button className="record-action-btn danger" title="删除" onClick={() => handleDelete('reminders', r.record_id)}>✕</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ========== 记账弹窗 ========== */}
+      {showLedgerModal && (
+        <FinanceModal
+          title={editingLedger ? '编辑记录' : '新增记账记录'}
+          onClose={() => { setShowLedgerModal(false); setEditingLedger(null); }}
+          onSubmit={submitLedger}
+          submitting={submitting}
+        >
+          <div className="finance-form-row">
+            <div className="finance-form-group">
+              <label className="finance-form-label">记录日期</label>
+              <input className="finance-form-input" type="date" name="记录日期" defaultValue={fieldToDateStr(editingLedger?.fields?.['记录日期']) || todayStr()} required />
+            </div>
+            <div className="finance-form-group">
+              <label className="finance-form-label">收支类型</label>
+              <select className="finance-form-select" name="收支类型" defaultValue={editingLedger?.fields?.['收支类型'] || '支出'}>
+                <option value="支出">支出</option>
+                <option value="收入">收入</option>
+                <option value="转账">转账</option>
+              </select>
+            </div>
+          </div>
+          <div className="finance-form-row">
+            <div className="finance-form-group">
+              <label className="finance-form-label">金额</label>
+              <input className="finance-form-input" type="number" step="0.01" name="金额" defaultValue={editingLedger?.fields?.['金额'] || ''} required />
+            </div>
+            <div className="finance-form-group">
+              <label className="finance-form-label">分类</label>
+              <select className="finance-form-select" name="分类" defaultValue={editingLedger?.fields?.['分类'] || ''}>
+                <option value="">请选择</option>
+                {(categoryOptions[editingLedger?.fields?.['收支类型'] || '支出'] || []).map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="finance-form-row">
+            <div className="finance-form-group">
+              <label className="finance-form-label">关联账户</label>
+              <select className="finance-form-select" name="关联账户" defaultValue={editingLedger?.fields?.['关联账户'] || ''}>
+                <option value="">请选择</option>
+                {accountOptions.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+            <div className="finance-form-group">
+              <label className="finance-form-label">关联贷款</label>
+              <select className="finance-form-select" name="关联贷款" defaultValue={editingLedger?.fields?.['关联贷款'] || ''}>
+                <option value="">无</option>
+                {loanOptions.map(l => <option key={l} value={l}>{l}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="finance-form-group">
+            <label className="finance-form-label">关联资产</label>
+            <select className="finance-form-select" name="关联资产" defaultValue={editingLedger?.fields?.['关联资产'] || ''}>
+              <option value="">无</option>
+              {assetOptions.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+          <div className="finance-form-group">
+            <label className="finance-form-label">备注</label>
+            <textarea className="finance-form-textarea" name="备注" defaultValue={editingLedger?.fields?.['备注'] || ''}></textarea>
+          </div>
+        </FinanceModal>
+      )}
+
+      {/* ========== 资产弹窗 ========== */}
+      {showAssetModal && (
+        <FinanceModal
+          title={editingAsset ? '编辑资产' : '新增资产'}
+          onClose={() => { setShowAssetModal(false); setEditingAsset(null); }}
+          onSubmit={submitAsset}
+          submitting={submitting}
+        >
+          <div className="finance-form-row">
+            <div className="finance-form-group">
+              <label className="finance-form-label">物品名称</label>
+              <input className="finance-form-input" name="物品名称" defaultValue={editingAsset?.fields?.['物品名称'] || ''} required />
+            </div>
+            <div className="finance-form-group">
+              <label className="finance-form-label">分类</label>
+              <select className="finance-form-select" name="分类" defaultValue={editingAsset?.fields?.['分类'] || ''}>
+                <option value="">请选择</option>
+                {assetCategoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="finance-form-row">
+            <div className="finance-form-group">
+              <label className="finance-form-label">购入价格</label>
+              <input className="finance-form-input" type="number" step="0.01" name="购入价格" defaultValue={editingAsset?.fields?.['购入价格'] || ''} />
+            </div>
+            <div className="finance-form-group">
+              <label className="finance-form-label">当前估值</label>
+              <input className="finance-form-input" type="number" step="0.01" name="当前估值" defaultValue={editingAsset?.fields?.['当前估值'] || ''} />
+            </div>
+          </div>
+          <div className="finance-form-row">
+            <div className="finance-form-group">
+              <label className="finance-form-label">购入日期</label>
+              <input className="finance-form-input" type="date" name="购入日期" defaultValue={fieldToDateStr(editingAsset?.fields?.['购入日期']) || todayStr()} />
+            </div>
+            <div className="finance-form-group">
+              <label className="finance-form-label">状态</label>
+              <select className="finance-form-select" name="状态" defaultValue={editingAsset?.fields?.['状态'] || '在用'}>
+                {assetStatusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="finance-form-row">
+            <div className="finance-form-group">
+              <label className="finance-form-label">折旧年限</label>
+              <input className="finance-form-input" type="number" name="折旧年限" defaultValue={editingAsset?.fields?.['折旧年限'] || ''} />
+            </div>
+            <div className="finance-form-group">
+              <label className="finance-form-label">购买渠道</label>
+              <input className="finance-form-input" name="购买渠道" defaultValue={editingAsset?.fields?.['购买渠道'] || ''} />
+            </div>
+          </div>
+          <div className="finance-form-group">
+            <label className="finance-form-label">备注</label>
+            <textarea className="finance-form-textarea" name="备注" defaultValue={editingAsset?.fields?.['备注'] || ''}></textarea>
+          </div>
+        </FinanceModal>
+      )}
+
+      {/* ========== 收入弹窗 ========== */}
+      {showIncomeModal && (
+        <FinanceModal
+          title={editingIncome ? '编辑收入' : '新增收入'}
+          onClose={() => { setShowIncomeModal(false); setEditingIncome(null); }}
+          onSubmit={submitIncome}
+          submitting={submitting}
+        >
+          <div className="finance-form-row">
+            <div className="finance-form-group">
+              <label className="finance-form-label">收入名称</label>
+              <input className="finance-form-input" name="收入名称" defaultValue={editingIncome?.fields?.['收入名称'] || ''} required />
+            </div>
+            <div className="finance-form-group">
+              <label className="finance-form-label">收入类型</label>
+              <select className="finance-form-select" name="收入类型" defaultValue={editingIncome?.fields?.['收入类型'] || ''}>
+                <option value="">请选择</option>
+                {incomeTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="finance-form-row">
+            <div className="finance-form-group">
+              <label className="finance-form-label">金额</label>
+              <input className="finance-form-input" type="number" step="0.01" name="金额" defaultValue={editingIncome?.fields?.['金额'] || ''} required />
+            </div>
+            <div className="finance-form-group">
+              <label className="finance-form-label">到账日期</label>
+              <input className="finance-form-input" type="date" name="到账日期" defaultValue={fieldToDateStr(editingIncome?.fields?.['到账日期']) || todayStr()} />
+            </div>
+          </div>
+          <div className="finance-form-row">
+            <div className="finance-form-group">
+              <label className="finance-form-label">来源</label>
+              <input className="finance-form-input" name="来源" defaultValue={editingIncome?.fields?.['来源'] || ''} />
+            </div>
+            <div className="finance-form-group">
+              <label className="finance-form-label">是否计入记账</label>
+              <select className="finance-form-select" name="是否计入记账" defaultValue={editingIncome?.fields?.['是否计入记账'] || '是'}>
+                <option value="是">是</option>
+                <option value="否">否</option>
+              </select>
+            </div>
+          </div>
+          <div className="finance-form-group">
+            <label className="finance-form-label">备注</label>
+            <textarea className="finance-form-textarea" name="备注" defaultValue={editingIncome?.fields?.['备注'] || ''}></textarea>
+          </div>
+        </FinanceModal>
+      )}
+
+      {/* ========== 贷款弹窗 ========== */}
+      {showLoanModal && (
+        <FinanceModal
+          title={editingLoan ? '编辑贷款' : '新增贷款'}
+          onClose={() => { setShowLoanModal(false); setEditingLoan(null); }}
+          onSubmit={submitLoan}
+          submitting={submitting}
+        >
+          <div className="finance-form-row">
+            <div className="finance-form-group">
+              <label className="finance-form-label">贷款名称</label>
+              <input className="finance-form-input" name="贷款名称" defaultValue={editingLoan?.fields?.['贷款名称'] || ''} required />
+            </div>
+            <div className="finance-form-group">
+              <label className="finance-form-label">类型</label>
+              <select className="finance-form-select" name="类型" defaultValue={editingLoan?.fields?.['类型'] || ''}>
+                <option value="">请选择</option>
+                {loanTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="finance-form-row">
+            <div className="finance-form-group">
+              <label className="finance-form-label">贷款总额</label>
+              <input className="finance-form-input" type="number" step="0.01" name="贷款总额" defaultValue={editingLoan?.fields?.['贷款总额'] || ''} />
+            </div>
+            <div className="finance-form-group">
+              <label className="finance-form-label">已还本金</label>
+              <input className="finance-form-input" type="number" step="0.01" name="已还本金" defaultValue={editingLoan?.fields?.['已还本金'] || 0} />
+            </div>
+          </div>
+          <div className="finance-form-row">
+            <div className="finance-form-group">
+              <label className="finance-form-label">年利率（%）</label>
+              <input className="finance-form-input" type="number" step="0.01" name="年利率" defaultValue={editingLoan?.fields?.['年利率'] || ''} />
+            </div>
+            <div className="finance-form-group">
+              <label className="finance-form-label">月还款额</label>
+              <input className="finance-form-input" type="number" step="0.01" name="月还款额" defaultValue={editingLoan?.fields?.['月还款额'] || ''} />
+            </div>
+          </div>
+          <div className="finance-form-row">
+            <div className="finance-form-group">
+              <label className="finance-form-label">总期数</label>
+              <input className="finance-form-input" type="number" name="总期数" defaultValue={editingLoan?.fields?.['总期数'] || ''} />
+            </div>
+            <div className="finance-form-group">
+              <label className="finance-form-label">已还期数</label>
+              <input className="finance-form-input" type="number" name="已还期数" defaultValue={editingLoan?.fields?.['已还期数'] || 0} />
+            </div>
+          </div>
+          <div className="finance-form-row">
+            <div className="finance-form-group">
+              <label className="finance-form-label">放款日期</label>
+              <input className="finance-form-input" type="date" name="放款日期" defaultValue={fieldToDateStr(editingLoan?.fields?.['放款日期']) || todayStr()} />
+            </div>
+            <div className="finance-form-group">
+              <label className="finance-form-label">还款日（每月几号）</label>
+              <input className="finance-form-input" type="number" min="1" max="31" name="还款日" defaultValue={editingLoan?.fields?.['还款日'] || 1} />
+            </div>
+          </div>
+          <div className="finance-form-row">
+            <div className="finance-form-group">
+              <label className="finance-form-label">还款账户</label>
+              <select className="finance-form-select" name="还款账户" defaultValue={editingLoan?.fields?.['还款账户'] || ''}>
+                <option value="">请选择</option>
+                {accountOptions.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+            <div className="finance-form-group">
+              <label className="finance-form-label">状态</label>
+              <select className="finance-form-select" name="状态" defaultValue={editingLoan?.fields?.['状态'] || '正常'}>
+                {loanStatusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="finance-form-group">
+            <label className="finance-form-label">备注</label>
+            <textarea className="finance-form-textarea" name="备注" defaultValue={editingLoan?.fields?.['备注'] || ''}></textarea>
+          </div>
+        </FinanceModal>
+      )}
+
+      {/* ========== 提醒弹窗 ========== */}
+      {showReminderModal && (
+        <FinanceModal
+          title={editingReminder ? '编辑提醒' : '新增提醒'}
+          onClose={() => { setShowReminderModal(false); setEditingReminder(null); }}
+          onSubmit={submitReminder}
+          submitting={submitting}
+        >
+          <div className="finance-form-row">
+            <div className="finance-form-group">
+              <label className="finance-form-label">提醒标题</label>
+              <input className="finance-form-input" name="提醒标题" defaultValue={editingReminder?.fields?.['提醒标题'] || ''} required />
+            </div>
+            <div className="finance-form-group">
+              <label className="finance-form-label">提醒类型</label>
+              <select className="finance-form-select" name="提醒类型" defaultValue={editingReminder?.fields?.['提醒类型'] || ''}>
+                <option value="">请选择</option>
+                {reminderTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="finance-form-row">
+            <div className="finance-form-group">
+              <label className="finance-form-label">金额</label>
+              <input className="finance-form-input" type="number" step="0.01" name="金额" defaultValue={editingReminder?.fields?.['金额'] || ''} />
+            </div>
+            <div className="finance-form-group">
+              <label className="finance-form-label">下次提醒日期</label>
+              <input className="finance-form-input" type="date" name="下次提醒日期" defaultValue={fieldToDateStr(editingReminder?.fields?.['下次提醒日期']) || todayStr()} />
+            </div>
+          </div>
+          <div className="finance-form-row">
+            <div className="finance-form-group">
+              <label className="finance-form-label">重复周期</label>
+              <select className="finance-form-select" name="重复周期" defaultValue={editingReminder?.fields?.['重复周期'] || '不重复'}>
+                {repeatCycleOptions.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="finance-form-group">
+              <label className="finance-form-label">状态</label>
+              <select className="finance-form-select" name="状态" defaultValue={editingReminder?.fields?.['状态'] || '启用'}>
+                {reminderStatusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="finance-form-group">
+            <label className="finance-form-label">关联贷款</label>
+            <select className="finance-form-select" name="关联贷款" defaultValue={editingReminder?.fields?.['关联贷款'] || ''}>
+              <option value="">无</option>
+              {loanOptions.map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
+          </div>
+          <div className="finance-form-group">
+            <label className="finance-form-label">备注</label>
+            <textarea className="finance-form-textarea" name="备注" defaultValue={editingReminder?.fields?.['备注'] || ''}></textarea>
+          </div>
+        </FinanceModal>
+      )}
+    </div>
+  );
+}
+
+// 通用弹窗组件
+function FinanceModal({ title, children, onClose, onSubmit, submitting }) {
+  return (
+    <div className="finance-modal-overlay" onClick={onClose}>
+      <div className="finance-modal" onClick={e => e.stopPropagation()}>
+        <div className="finance-modal-header">
+          <div className="finance-modal-title">{title}</div>
+          <button className="finance-modal-close" onClick={onClose}>×</button>
+        </div>
+        <form onSubmit={onSubmit}>
+          <div className="finance-modal-body">{children}</div>
+          <div className="finance-modal-footer">
+            <button type="button" className="finance-btn ghost" onClick={onClose}>取消</button>
+            <button type="submit" className="finance-btn primary" disabled={submitting}>
+              {submitting ? '保存中...' : '保存'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+
+
+/* ==========================================================
+   模块详情页 ModulePage
+   ========================================================== */
+
+function ModulePage({ moduleName, icon, color, modulePath }) {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -564,13 +2332,33 @@ function ModulePage({ moduleName, icon, color }) {
   const [filters, setFilters] = useState({
     status: '', priority: '', search: '', showArchived: false,
   });
-  const [viewMode, setViewMode] = useState(() => {
-    return localStorage.getItem('oc_view_' + moduleName) || 'card';
-  });
 
-  const handleViewChange = (mode) => {
-    setViewMode(mode);
-    localStorage.setItem('oc_view_' + moduleName, mode);
+  // 模块锁定状态
+  const [moduleLocked, setModuleLocked] = useState(false);
+  const [moduleUnlocked, setModuleUnlocked] = useState(false);
+  const [showLockModal, setShowLockModal] = useState(false);
+
+  const refreshModuleLock = () => {
+    if (!modulePath) return;
+    const locked = isModuleLocked(modulePath);
+    setModuleLocked(locked);
+    // 会话态解锁优先
+    setModuleUnlocked(locked ? isSessionUnlocked(modulePath) : true);
+  };
+
+  useEffect(() => {
+    refreshModuleLock();
+    const onStorage = () => refreshModuleLock();
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [modulePath]);
+
+  const handleModuleUnlock = () => {
+    if (modulePath) {
+      setSessionUnlocked(modulePath, true);
+      setModuleUnlocked(true);
+    }
+    setShowLockModal(false);
   };
 
   useEffect(() => {
@@ -726,24 +2514,56 @@ function ModulePage({ moduleName, icon, color }) {
         <div className="flex items-center gap-3">
           <span className="page-icon">{icon}</span>
           <div>
-            <h1 className="page-title">{moduleName}</h1>
+            <h1 className="page-title">
+              {moduleName}
+              {moduleLocked && <span className="page-lock-icon" title="模块已锁定">🔒</span>}
+            </h1>
             <div className="page-sub text-secondary">
-              共 {stats.total} 项任务 · {stats.doing} 进行中 · {stats.todo} 待办 · {stats.done} 已完成
+              {moduleLocked && !moduleUnlocked
+                ? '此模块已锁定，请解锁后查看内容'
+                : `共 ${stats.total} 项任务 · ${stats.doing} 进行中 · ${stats.todo} 待办 · ${stats.done} 已完成`}
             </div>
           </div>
         </div>
         <div className="page-actions flex gap-2">
-          {!unlocked && (
+          {moduleLocked && !moduleUnlocked && (
+            <button className="btn btn-warning" onClick={() => setShowLockModal(true)}>
+              🔓 解锁模块
+            </button>
+          )}
+          {(!moduleLocked || moduleUnlocked) && !unlocked && (
             <button className="btn btn-secondary" onClick={() => setShowPwd(true)}>
               🔒 解锁隐私
             </button>
           )}
-          <button className="btn btn-primary" onClick={openAddForm}>
-            + 新建任务
-          </button>
+          {(!moduleLocked || moduleUnlocked) && (
+            <button className="btn btn-primary" onClick={openAddForm}>
+              + 新建任务
+            </button>
+          )}
         </div>
       </div>
 
+      {/* 模块锁定 - 大锁界面 */}
+      {moduleLocked && !moduleUnlocked && (
+        <div className="module-lock-screen">
+          <div className="module-lock-content">
+            <button
+              className="module-lock-big-btn"
+              onClick={() => setShowLockModal(true)}
+              title="点击解锁"
+            >
+              <div className="module-lock-big-icon">🔒</div>
+              <div className="module-lock-big-text">模块已锁定</div>
+              <div className="module-lock-big-hint">点击输入密码解锁</div>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 模块内容 - 未锁定或已解锁时显示 */}
+      {(!moduleLocked || moduleUnlocked) && (
+        <>
       {error && (
         <div className="error-banner">
           ⚠️ {error}
@@ -795,22 +2615,6 @@ function ModulePage({ moduleName, icon, color }) {
             显示归档
           </label>
         </div>
-        <div className="view-toggle">
-          <button
-            className={`view-btn ${viewMode === 'card' ? 'active' : ''}`}
-            onClick={() => handleViewChange('card')}
-            title="卡片视图"
-          >
-            ▦ 卡片
-          </button>
-          <button
-            className={`view-btn ${viewMode === 'list' ? 'active' : ''}`}
-            onClick={() => handleViewChange('list')}
-            title="列表视图"
-          >
-            ☰ 列表
-          </button>
-        </div>
         <button className="btn btn-secondary text-sm" onClick={loadRecords}>
           🔄 刷新
         </button>
@@ -826,7 +2630,6 @@ function ModulePage({ moduleName, icon, color }) {
             <button className="btn btn-primary" onClick={openAddForm}>+ 创建第一条任务</button>
           </div>
         ) : (
-          {viewMode === 'card' ? (
           <div className="task-cards">
             {visibleRecords.map(record => {
               const f = record.fields;
@@ -905,81 +2708,6 @@ function ModulePage({ moduleName, icon, color }) {
                     ))}
                   </div>
                 </div>
-          ) : (
-            <div className="task-list-table">
-              <div className="table-header">
-                <span className="col-title">任务</span>
-                <span className="col-status">状态</span>
-                <span className="col-priority">优先级</span>
-                <span className="col-progress">进度</span>
-                <span className="col-due">截止时间</span>
-                <span className="col-actions">操作</span>
-              </div>
-              {visibleRecords.map(record => {
-                const f = record.fields;
-                const dueStatus = getDueStatus(f['截止时间'], f['任务状态']);
-                const isHidden = f['隐私状态'] === '隐藏';
-                const isArchived = f['任务状态'] === '归档';
-                
-                return (
-                  <div
-                    key={record.record_id}
-                    className={`table-row ${isHidden ? 'task-hidden' : ''} ${isArchived ? 'task-archived' : ''}`}
-                  >
-                    <div className="col-title">
-                      <div className="row-title truncate">{f['任务标题'] || '未命名'}</div>
-                      {f['详细内容'] && (
-                        <div className="row-desc text-secondary text-xs truncate">
-                          {f['详细内容']}
-                        </div>
-                      )}
-                    </div>
-                    <div className="col-status">
-                      <span className={`tag ${STATUS_COLORS[f['任务状态']] || 'tag-gray'}`}>
-                        {f['任务状态'] || '未设置'}
-                      </span>
-                    </div>
-                    <div className="col-priority">
-                      <span className={`tag ${PRIORITY_COLORS[f['优先级']] || 'tag-gray'}`}>
-                        {f['优先级'] || '中'}
-                      </span>
-                    </div>
-                    <div className="col-progress">
-                      {f['进度占比'] !== undefined ? (
-                        <div className="row-progress">
-                          <div className="progress-bar-sm">
-                            <div
-                              className="progress-fill-sm"
-                              style={{
-                                width: `${f['进度占比'] || 0}%`,
-                                background: `linear-gradient(90deg, var(--accent-${color}), var(--accent-purple))`,
-                              }}
-                            />
-                          </div>
-                          <span className="text-xs text-muted">{f['进度占比'] || 0}%</span>
-                        </div>
-                      ) : '-'}
-                    </div>
-                    <div className="col-due">
-                      {f['截止时间'] ? (
-                        <span className={`text-xs due-${dueStatus}`}>
-                          📅 {formatDate(f['截止时间'])}
-                        </span>
-                      ) : '-'}
-                    </div>
-                    <div className="col-actions">
-                      <button className="action-btn" title="查看详情" onClick={() => setViewRecord(record)}>👁</button>
-                      <button className="action-btn" title="编辑" onClick={() => openEditForm(record)}>✏️</button>
-                      <button className="action-btn" title={isArchived ? '恢复' : '归档'} onClick={() => handleArchive(record)}>
-                        {isArchived ? '↩️' : '📦'}
-                      </button>
-                      <button className="action-btn action-danger" title="删除" onClick={() => handleDelete(record)}>🗑</button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
               );
             })}
           </div>
@@ -1189,6 +2917,16 @@ function ModulePage({ moduleName, icon, color }) {
           </div>
         </div>
       )}
+        </>
+      )}
+
+      {showLockModal && (
+        <ModuleUnlockModal
+          title={`解锁「${moduleName}」`}
+          onSuccess={handleModuleUnlock}
+          onClose={() => setShowLockModal(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1238,6 +2976,44 @@ function ModuleManagePage({ modules, onModulesChange }) {
   const [editingModule, setEditingModule] = useState(null);
   const [formData, setFormData] = useState({});
   const [saving, setSaving] = useState(false);
+  const [lockedMap, setLockedMap] = useState({});
+  const [showUnlockModal, setShowUnlockModal] = useState(false);
+  const [showChangePwdModal, setShowChangePwdModal] = useState(false);
+  const [unlockTarget, setUnlockTarget] = useState(null);
+
+  // 刷新锁定状态
+  const refreshLocked = () => {
+    const map = {};
+    getLockedModules().forEach(p => { map[p] = true; });
+    setLockedMap(map);
+  };
+
+  useEffect(() => {
+    refreshLocked();
+    const onStorage = () => refreshLocked();
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  const handleLock = (mod) => {
+    lockModule(mod.path);
+    refreshLocked();
+  };
+
+  const openUnlockModal = (mod) => {
+    setUnlockTarget(mod);
+    setShowUnlockModal(true);
+  };
+
+  const handleUnlockSuccess = () => {
+    if (unlockTarget) {
+      unlockModule(unlockTarget.path);
+      setSessionUnlocked(unlockTarget.path, false);
+      refreshLocked();
+    }
+    setShowUnlockModal(false);
+    setUnlockTarget(null);
+  };
 
   const openAddForm = () => {
     setEditingModule(null);
@@ -1277,8 +3053,13 @@ function ModuleManagePage({ modules, onModulesChange }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData['模块名称'] || !formData['路径标识']) {
-      alert('请填写模块名称和路径标识');
+    if (!formData['模块名称']) {
+      alert('请填写模块名称');
+      return;
+    }
+    // 新建时校验路径标识（自动生成，一般不会空）
+    if (!editingModule && !formData['路径标识']) {
+      alert('路径标识生成失败，请重试');
       return;
     }
     try {
@@ -1320,11 +3101,16 @@ function ModuleManagePage({ modules, onModulesChange }) {
       </div>
 
       <div className="module-grid">
-        {modules.map(mod => (
-          <div key={mod.record_id || mod.key} className={`module-card card theme-${mod.color}`}>
+        {modules.map(mod => {
+          const isLocked = !!lockedMap[mod.path];
+          return (
+          <div key={mod.record_id || mod.key} className={`module-card card theme-${mod.color} ${isLocked ? 'module-card-locked' : ''}`}>
             <div className="module-card-header">
               <span className="module-icon">{mod.icon}</span>
-              <h3 className="module-name">{mod.key}</h3>
+              <h3 className="module-name">
+                {mod.key}
+                {isLocked && <span className="module-lock-icon" title="已锁定">🔒</span>}
+              </h3>
             </div>
             {mod.description && (
               <p className="module-desc text-secondary text-sm">{mod.description}</p>
@@ -1335,9 +3121,15 @@ function ModuleManagePage({ modules, onModulesChange }) {
             <div className="module-actions">
               <button className="btn btn-secondary btn-sm" onClick={() => openEditForm(mod)}>✏️ 编辑</button>
               <button className="btn btn-danger-ghost btn-sm" onClick={() => handleDelete(mod)}>🗑 删除</button>
+              {isLocked ? (
+                <button className="btn btn-warning btn-sm" onClick={() => openUnlockModal(mod)}>🔓 解锁</button>
+              ) : (
+                <button className="btn btn-secondary btn-sm" onClick={() => handleLock(mod)}>🔒 锁定</button>
+              )}
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowChangePwdModal(true)}>🔐 改密码</button>
             </div>
           </div>
-        ))}
+        );})}
       </div>
 
       {showForm && (
@@ -1434,6 +3226,21 @@ function ModuleManagePage({ modules, onModulesChange }) {
           </div>
         </div>
       )}
+
+      {showUnlockModal && (
+        <ModuleUnlockModal
+          title={`解锁「${unlockTarget?.key || ''}」`}
+          onSuccess={handleUnlockSuccess}
+          onClose={() => { setShowUnlockModal(false); setUnlockTarget(null); }}
+        />
+      )}
+
+      {showChangePwdModal && (
+        <ChangeLockPasswordModal
+          onSuccess={() => setShowChangePwdModal(false)}
+          onClose={() => setShowChangePwdModal(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1441,6 +3248,7 @@ function ModuleManagePage({ modules, onModulesChange }) {
 /* ==========================================================
    页面：总看板 Dashboard
    ========================================================== */
+
 
 function Dashboard({ modules }) {
   const [records, setRecords] = useState([]);
@@ -1712,9 +3520,1096 @@ function Dashboard({ modules }) {
   );
 }
 
+
+
 /* ==========================================================
-   根组件 App
+   教务教学管理模块 TeachingPage
    ========================================================== */
+
+/* ==========================================================
+   教务教学管理模块配置
+   ========================================================== */
+
+const TEACHING_CONFIG = {
+  appToken: 'ZGcrbdAztars3CsTFtAcUciLn9e',
+  tables: {
+    semester: 'tblPoTo3oqv4izaa',     // 学期表
+    teacher: 'tblIkr456IASanjo',      // 教师表
+    course: 'tblMGFvaEfncrnwV',       // 课程表
+    classroom: 'tblYRnSlySLGvl9q',    // 教室表
+    teachingClass: 'tblcwtGhOTmeZdzy', // 教学班表
+    archive: 'tblozi3xBLYLSrVh',      // 课程档案表
+    work: 'tbl4PDL0rQQtlDua',         // 工作表
+    module: 'tblo2A5lbJxcP7Jx',       // 模块表
+  }
+};
+
+// 通用：按条件搜索记录（全量拉取后 JS 过滤，保持与现有模式一致）
+async function fetchTeachingTable(tableKey) {
+  const { appToken, tables } = TEACHING_CONFIG;
+  const tableId = tables[tableKey];
+  if (!tableId) return [];
+  const allItems = [];
+  let pageToken = '';
+  let hasMore = true;
+  while (hasMore) {
+    const url = `/bitable/v1/apps/${appToken}/tables/${tableId}/records/search`;
+    const body = { page_size: 500 };
+    if (pageToken) body.page_token = pageToken;
+    const data = await feishuRequest(url, { method: 'POST', body: JSON.stringify(body) });
+    allItems.push(...(data.items || []));
+    hasMore = data.has_more;
+    pageToken = data.page_token || '';
+  }
+  return allItems.map(item => ({ ...item, fields: cleanFields(item.fields) }));
+}
+
+// 获取所有教学相关数据
+async function fetchAllTeachingData() {
+  const [semesters, teachers, courses, classrooms, teachingClasses, archives, works] = await Promise.all([
+    fetchTeachingTable('semester'),
+    fetchTeachingTable('teacher'),
+    fetchTeachingTable('course'),
+    fetchTeachingTable('classroom'),
+    fetchTeachingTable('teachingClass'),
+    fetchTeachingTable('archive'),
+    fetchTeachingTable('work'),
+  ]);
+  return { semesters, teachers, courses, classrooms, teachingClasses, archives, works };
+}
+
+// 工具：从关联字段（record_id 数组）映射名称
+function mapRelationNames(recordIds, allRecords, nameField = '名称') {
+  if (!recordIds || !Array.isArray(recordIds) || recordIds.length === 0) return [];
+  const map = {};
+  allRecords.forEach(r => { map[r.record_id] = getFieldValue(r.fields[nameField]) || r.record_id; });
+  return recordIds.map(id => map[id] || id).filter(Boolean);
+}
+
+function getFirstRelationName(recordIds, allRecords, nameField = '名称') {
+  const names = mapRelationNames(recordIds, allRecords, nameField);
+  return names.length > 0 ? names[0] : '';
+}
+
+// 获取本周的起止时间
+function getWeekRange(date = new Date()) {
+  const d = new Date(date);
+  const day = d.getDay() || 7; // 周日=7
+  const start = new Date(d);
+  start.setDate(d.getDate() - day + 1);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+}
+
+// 计算当前学期进度（第几周/总周数）
+function calcSemesterProgress(semester) {
+  if (!semester) return { currentWeek: 0, totalWeeks: 0, percent: 0 };
+  const f = semester.fields;
+  const startDate = f['开始日期'] ? new Date(f['开始日期']) : null;
+  const endDate = f['结束日期'] ? new Date(f['结束日期']) : null;
+  const totalWeeks = Number(f['总周数']) || 0;
+  
+  if (!startDate || !endDate) {
+    return { currentWeek: 0, totalWeeks, percent: 0 };
+  }
+  
+  const now = new Date();
+  if (now < startDate) {
+    return { currentWeek: 0, totalWeeks, percent: 0 };
+  }
+  if (now > endDate) {
+    return { currentWeek: totalWeeks, totalWeeks, percent: 100 };
+  }
+  
+  const diffMs = now - startDate;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const currentWeek = Math.min(totalWeeks, Math.floor(diffDays / 7) + 1);
+  const percent = totalWeeks > 0 ? Math.round((currentWeek / totalWeeks) * 100) : 0;
+  
+  return { currentWeek, totalWeeks, percent };
+}
+
+/* ==========================================================
+   组件：教学管理模块 TeachingPage
+   ========================================================== */
+
+function TeachingPage() {
+  const { path } = useHashRoute();
+  const [activeNav, setActiveNav] = React.useState('overview');
+  const [data, setData] = React.useState({
+    semesters: [], teachers: [], courses: [], classrooms: [],
+    teachingClasses: [], archives: [], works: [],
+  });
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState('');
+  const [currentSemester, setCurrentSemester] = React.useState(null);
+
+  // 模块锁定状态
+  const [moduleLocked, setModuleLocked] = React.useState(false);
+  const [moduleUnlocked, setModuleUnlocked] = React.useState(false);
+  const [showLockModal, setShowLockModal] = React.useState(false);
+
+  const modulePath = '/teaching';
+
+  const refreshModuleLock = () => {
+    const locked = isModuleLocked(modulePath);
+    setModuleLocked(locked);
+    setModuleUnlocked(locked ? isSessionUnlocked(modulePath) : true);
+  };
+
+  React.useEffect(() => {
+    refreshModuleLock();
+    const onStorage = () => refreshModuleLock();
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  const handleModuleUnlock = () => {
+    setSessionUnlocked(modulePath, true);
+    setModuleUnlocked(true);
+    setShowLockModal(false);
+  };
+
+  const loadData = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const result = await fetchAllTeachingData();
+      setData(result);
+      // 设置当前学期：找「当前学期=是」的记录
+      const current = result.semesters.find(s => s.fields['当前学期'] === '是');
+      setCurrentSemester(current || (result.semesters.length > 0 ? result.semesters[0] : null));
+    } catch (e) {
+      setError('加载失败：' + (e.message || '未知错误'));
+    }
+    setLoading(false);
+  };
+
+  React.useEffect(() => { loadData(); }, []);
+
+  // 从路径解析当前导航
+  React.useEffect(() => {
+    if (path.startsWith('/teaching/')) {
+      const sub = path.replace('/teaching/', '');
+      setActiveNav(sub);
+    } else {
+      setActiveNav('overview');
+    }
+  }, [path]);
+
+  const navigateTo = (key) => {
+    window.location.hash = key === 'overview' ? '/teaching' : `/teaching/${key}`;
+  };
+
+  const semesterNavItems = [
+    { key: 'overview', label: '总览', icon: '📊' },
+    { key: 'courses', label: '专业课程', icon: '📚' },
+    { key: 'teachers', label: '任课教师', icon: '👨‍🏫' },
+    { key: 'archives', label: '课程档案', icon: '📁' },
+    { key: 'classes', label: '教学班', icon: '🏫' },
+    { key: 'schedule', label: '排课安排', icon: '📅' },
+    { key: 'resources', label: '学期资源', icon: '📎' },
+  ];
+
+  const fullDataNavItems = [
+    { key: 'teacher-archive', label: '教师档案', icon: '👥' },
+    { key: 'course-lib', label: '课程库', icon: '📖' },
+    { key: 'classroom-archive', label: '教室档案', icon: '🚪' },
+    { key: 'all-work', label: '全部工作', icon: '✅' },
+    { key: 'all-resources', label: '全部资源', icon: '📦' },
+  ];
+
+  // 当前学期相关的过滤数据
+  const semesterData = React.useMemo(() => {
+    if (!currentSemester) {
+      return { courses: [], teachers: [], classes: [], archives: [], works: [] };
+    }
+    const semId = currentSemester.record_id;
+    
+    // 课程：所属学期关联
+    const semesterCourses = data.courses.filter(c => {
+      const sems = c.fields['所属学期'];
+      return Array.isArray(sems) ? sems.includes(semId) : sems === semId;
+    });
+    
+    // 教学班：所属学期关联
+    const semesterClasses = data.teachingClasses.filter(c => {
+      const sems = c.fields['所属学期'];
+      return Array.isArray(sems) ? sems.includes(semId) : sems === semId;
+    });
+    
+    // 任课教师：通过教学班关联
+    const teacherIds = new Set();
+    semesterClasses.forEach(c => {
+      const tids = c.fields['授课教师'];
+      if (Array.isArray(tids)) tids.forEach(id => teacherIds.add(id));
+      else if (tids) teacherIds.add(tids);
+    });
+    const semesterTeachers = data.teachers.filter(t => teacherIds.has(t.record_id));
+    
+    // 课程档案：所属学期关联
+    const semesterArchives = data.archives.filter(a => {
+      const sems = a.fields['所属学期'];
+      return Array.isArray(sems) ? sems.includes(semId) : sems === semId;
+    });
+    
+    // 工作：所属学期关联
+    const semesterWorks = data.works.filter(w => {
+      const sems = w.fields['所属学期'];
+      return Array.isArray(sems) ? sems.includes(semId) : sems === semId;
+    });
+    
+    return {
+      courses: semesterCourses,
+      teachers: semesterTeachers,
+      classes: semesterClasses,
+      archives: semesterArchives,
+      works: semesterWorks,
+    };
+  }, [data, currentSemester]);
+
+  const handleSemesterChange = (recordId) => {
+    const sem = data.semesters.find(s => s.record_id === recordId);
+    if (sem) setCurrentSemester(sem);
+  };
+
+  // ========== 渲染 ==========
+  if (loading) {
+    return (
+      <div className="teaching-page">
+        <div className="teaching-loading">加载中...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="teaching-page">
+        <div style={{padding:'40px', textAlign:'center', color:'#f87171'}}>
+          {error}
+          <div style={{marginTop:'16px'}}>
+            <button className="teaching-btn primary" onClick={loadData}>重试</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="teaching-page">
+      {/* 顶部栏 */}
+      <div className="teaching-header">
+        <div className="teaching-header-left">
+          <span className="teaching-header-icon">📚</span>
+          <div>
+            <h1 className="teaching-header-title">
+              教务教学管理
+              {moduleLocked && <span className="page-lock-icon" title="模块已锁定">🔒</span>}
+            </h1>
+            <div className="teaching-header-sub">
+              {moduleLocked && !moduleUnlocked
+                ? '此模块已锁定，请解锁后查看内容'
+                : currentSemester
+                  ? `当前学期：${currentSemester.fields['学期名称'] || '未设置'} · 共 ${semesterData.courses.length} 门课程 · ${semesterData.teachers.length} 位教师`
+                  : '暂无学期数据'}
+            </div>
+          </div>
+        </div>
+        <div className="teaching-header-right">
+          {moduleLocked && !moduleUnlocked && (
+            <button className="btn btn-warning" onClick={() => setShowLockModal(true)}>
+              🔓 解锁模块
+            </button>
+          )}
+          {(!moduleLocked || moduleUnlocked) && (
+            <>
+              <select
+                className="teaching-semester-select"
+                value={currentSemester?.record_id || ''}
+                onChange={e => handleSemesterChange(e.target.value)}
+              >
+                {data.semesters.map(s => (
+                  <option key={s.record_id} value={s.record_id}>
+                    {s.fields['学期名称'] || '未命名学期'}
+                  </option>
+                ))}
+              </select>
+              <button className="teaching-btn primary" onClick={loadData}>🔄 刷新</button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* 模块锁定 - 大锁界面 */}
+      {moduleLocked && !moduleUnlocked && (
+        <div className="module-lock-screen">
+          <div className="module-lock-content">
+            <button
+              className="module-lock-big-btn"
+              onClick={() => setShowLockModal(true)}
+              title="点击解锁"
+            >
+              <div className="module-lock-big-icon">🔒</div>
+              <div className="module-lock-big-text">模块已锁定</div>
+              <div className="module-lock-big-hint">点击输入密码解锁</div>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 主内容区 */}
+      {(!moduleLocked || moduleUnlocked) && (
+        <div className="teaching-layout">
+          {/* 左侧导航 */}
+          <aside className="teaching-sidebar">
+            <div className="teaching-nav-group">
+              <div className="teaching-nav-group-title">
+                <span>📁</span> 学期入口
+                <span className="teaching-nav-group-hint">随学期切换</span>
+              </div>
+              {semesterNavItems.map(item => (
+                <div
+                  key={item.key}
+                  className={'teaching-nav-item' + (activeNav === item.key ? ' active' : '')}
+                  onClick={() => navigateTo(item.key)}
+                >
+                  <span className="teaching-nav-icon">{item.icon}</span>
+                  <span className="teaching-nav-label">{item.label}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="teaching-nav-group">
+              <div className="teaching-nav-group-title">
+                <span>📂</span> 全量数据
+                <span className="teaching-nav-group-hint">不随学期切换</span>
+              </div>
+              {fullDataNavItems.map(item => (
+                <div
+                  key={item.key}
+                  className={'teaching-nav-item' + (activeNav === item.key ? ' active' : '')}
+                  onClick={() => navigateTo(item.key)}
+                >
+                  <span className="teaching-nav-icon">{item.icon}</span>
+                  <span className="teaching-nav-label">{item.label}</span>
+                </div>
+              ))}
+            </div>
+          </aside>
+
+          {/* 右侧内容 */}
+          <main className="teaching-content">
+            {activeNav === 'overview' && (
+              <TeachingOverview
+                semester={currentSemester}
+                semesterData={semesterData}
+                allData={data}
+              />
+            )}
+            {activeNav === 'courses' && (
+              <TeachingCourses
+                courses={semesterData.courses}
+                teachingClasses={semesterData.classes}
+                archives={semesterData.archives}
+                allTeachers={data.teachers}
+              />
+            )}
+            {activeNav === 'teachers' && (
+              <TeachingTeachers
+                teachers={semesterData.teachers}
+                teachingClasses={semesterData.classes}
+              />
+            )}
+            {activeNav === 'archives' && (
+              <TeachingArchives
+                archives={semesterData.archives}
+                allCourses={semesterData.courses}
+                allTeachers={data.teachers}
+              />
+            )}
+            {activeNav === 'classes' && (
+              <TeachingPlaceholder title="教学班" icon="🏫" />
+            )}
+            {activeNav === 'schedule' && (
+              <TeachingPlaceholder title="排课安排" icon="📅" />
+            )}
+            {activeNav === 'resources' && (
+              <TeachingPlaceholder title="学期资源" icon="📎" />
+            )}
+            {activeNav === 'teacher-archive' && (
+              <TeachingTeacherArchive teachers={data.teachers} />
+            )}
+            {activeNav === 'course-lib' && (
+              <TeachingPlaceholder title="课程库" icon="📖" />
+            )}
+            {activeNav === 'classroom-archive' && (
+              <TeachingPlaceholder title="教室档案" icon="🚪" />
+            )}
+            {activeNav === 'all-work' && (
+              <TeachingPlaceholder title="全部工作" icon="✅" />
+            )}
+            {activeNav === 'all-resources' && (
+              <TeachingPlaceholder title="全部资源" icon="📦" />
+            )}
+          </main>
+        </div>
+      )}
+
+      {showLockModal && (
+        <ModuleUnlockModal
+          title="解锁「教务教学管理」"
+          onSuccess={handleModuleUnlock}
+          onClose={() => setShowLockModal(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ==========================================================
+   子页面：总览 TeachingOverview
+   ========================================================== */
+
+function TeachingOverview({ semester, semesterData, allData }) {
+  const { courses, teachers, classes, archives, works } = semesterData;
+  const { classrooms } = allData;
+
+  const progress = React.useMemo(() => calcSemesterProgress(semester), [semester]);
+
+  // 本周工作
+  const weekWorks = React.useMemo(() => {
+    const { start, end } = getWeekRange();
+    return works
+      .filter(w => {
+        const due = w.fields['截止日期'];
+        if (!due) return false;
+        const d = new Date(due);
+        return d >= start && d <= end;
+      })
+      .sort((a, b) => (a.fields['截止日期'] || 0) - (b.fields['截止日期'] || 0))
+      .slice(0, 5);
+  }, [works]);
+
+  // 重点工作（高优先级且未完成）
+  const keyWorks = React.useMemo(() => {
+    return works
+      .filter(w => {
+        const priority = w.fields['优先级'];
+        const status = w.fields['状态'];
+        return priority === '高' && status !== '已完成';
+      })
+      .sort((a, b) => (a.fields['截止日期'] || 0) - (b.fields['截止日期'] || 0))
+      .slice(0, 5);
+  }, [works]);
+
+  // 常规工作进度（从课程档案统计）
+  const routineProgress = React.useMemo(() => {
+    const total = archives.length || 1;
+    const calcDone = (fieldName, doneVal = '已完成') => {
+      const done = archives.filter(a => a.fields[fieldName] === doneVal).length;
+      return Math.round((done / total) * 100);
+    };
+    return {
+      outline: calcDone('大纲状态', '已完成'),
+      lessonPlan: calcDone('教案状态', '已完成'),
+      observation: calcDone('听课状态', '已完成'),
+      homework: calcDone('作业批改状态', '已完成'),
+    };
+  }, [archives]);
+
+  const quickActions = [
+    { icon: '📝', label: '新增工作' },
+    { icon: '📋', label: '会议记录' },
+    { icon: '👂', label: '听课记录' },
+    { icon: '📚', label: '资源库' },
+    { icon: '➕', label: '新增课程' },
+    { icon: '📦', label: '档案归档' },
+  ];
+
+  const handleQuickAction = (label) => {
+    alert(`${label} - 功能开发中...`);
+  };
+
+  return (
+    <div className="teaching-overview">
+      {/* 统计卡片 */}
+      <div className="teaching-stat-grid">
+        <div className="teaching-stat-card stat-courses">
+          <div className="teaching-stat-label">课程数</div>
+          <div className="teaching-stat-value">{courses.length}</div>
+          <div className="teaching-stat-sub">本学期开设课程</div>
+        </div>
+        <div className="teaching-stat-card stat-teachers">
+          <div className="teaching-stat-label">任课教师</div>
+          <div className="teaching-stat-value">{teachers.length}</div>
+          <div className="teaching-stat-sub">本学期授课教师</div>
+        </div>
+        <div className="teaching-stat-card stat-classes">
+          <div className="teaching-stat-label">教学班级</div>
+          <div className="teaching-stat-value">{classes.length}</div>
+          <div className="teaching-stat-sub">教学班数量</div>
+        </div>
+        <div className="teaching-stat-card stat-classrooms">
+          <div className="teaching-stat-label">教室数</div>
+          <div className="teaching-stat-value">{classrooms.length}</div>
+          <div className="teaching-stat-sub">可用教室总数</div>
+        </div>
+      </div>
+
+      {/* 学期进度 */}
+      <div className="teaching-card">
+        <div className="teaching-card-title">
+          <span>📅</span> 本学期进度
+        </div>
+        <div className="teaching-semester-progress">
+          <div className="teaching-progress-info">
+            <span>第 {progress.currentWeek} 周 / 共 {progress.totalWeeks} 周</span>
+            <span className="teaching-progress-percent">{progress.percent}%</span>
+          </div>
+          <div className="teaching-progress-bar">
+            <div
+              className="teaching-progress-fill"
+              style={{ width: progress.percent + '%' }}
+            ></div>
+          </div>
+          <div className="teaching-progress-dates">
+            <span>{semester?.fields['开始日期'] ? formatDate(semester.fields['开始日期']) : '—'}</span>
+            <span>{semester?.fields['结束日期'] ? formatDate(semester.fields['结束日期']) : '—'}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="teaching-grid-2col">
+        {/* 本周工作 */}
+        <div className="teaching-card">
+          <div className="teaching-card-title">
+            <span>📋</span> 本周工作
+            <span className="teaching-card-badge">{weekWorks.length}</span>
+          </div>
+          {weekWorks.length === 0 ? (
+            <div className="teaching-empty">暂无本周待办</div>
+          ) : (
+            <div className="teaching-work-list">
+              {weekWorks.map(w => {
+                const status = w.fields['状态'] || '待执行';
+                const priority = w.fields['优先级'] || '中';
+                return (
+                  <div key={w.record_id} className="teaching-work-item">
+                    <div className="teaching-work-dot"></div>
+                    <div className="teaching-work-info">
+                      <div className="teaching-work-title">{w.fields['工作标题'] || w.fields['标题'] || '未命名'}</div>
+                      <div className="teaching-work-meta">
+                        {formatDate(w.fields['截止日期'])} · {w.fields['负责人'] || '未分配'}
+                      </div>
+                    </div>
+                    <span className={`tag ${PRIORITY_COLORS[priority] || 'tag-gray'}`}>{priority}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* 重点工作 */}
+        <div className="teaching-card">
+          <div className="teaching-card-title">
+            <span>🔥</span> 重点工作
+            <span className="teaching-card-badge badge-red">{keyWorks.length}</span>
+          </div>
+          {keyWorks.length === 0 ? (
+            <div className="teaching-empty">暂无高优先级工作</div>
+          ) : (
+            <div className="teaching-work-list">
+              {keyWorks.map(w => {
+                const status = w.fields['状态'] || '待执行';
+                return (
+                  <div key={w.record_id} className="teaching-work-item">
+                    <div className="teaching-work-dot dot-red"></div>
+                    <div className="teaching-work-info">
+                      <div className="teaching-work-title">{w.fields['工作标题'] || w.fields['标题'] || '未命名'}</div>
+                      <div className="teaching-work-meta">
+                        截止：{formatDate(w.fields['截止日期'])}
+                      </div>
+                    </div>
+                    <span className={`tag ${STATUS_COLORS[status] || 'tag-gray'}`}>{status}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 常规工作进度 */}
+      <div className="teaching-card">
+        <div className="teaching-card-title">
+          <span>📊</span> 常规工作进度
+        </div>
+        <div className="teaching-routine-grid">
+          <div className="teaching-routine-item">
+            <div className="teaching-routine-label">大纲完成</div>
+            <div className="teaching-routine-bar">
+              <div className="teaching-routine-fill" style={{ width: routineProgress.outline + '%' }}></div>
+            </div>
+            <div className="teaching-routine-percent">{routineProgress.outline}%</div>
+          </div>
+          <div className="teaching-routine-item">
+            <div className="teaching-routine-label">教案进度</div>
+            <div className="teaching-routine-bar">
+              <div className="teaching-routine-fill" style={{ width: routineProgress.lessonPlan + '%' }}></div>
+            </div>
+            <div className="teaching-routine-percent">{routineProgress.lessonPlan}%</div>
+          </div>
+          <div className="teaching-routine-item">
+            <div className="teaching-routine-label">听课进度</div>
+            <div className="teaching-routine-bar">
+              <div className="teaching-routine-fill" style={{ width: routineProgress.observation + '%' }}></div>
+            </div>
+            <div className="teaching-routine-percent">{routineProgress.observation}%</div>
+          </div>
+          <div className="teaching-routine-item">
+            <div className="teaching-routine-label">作业批改</div>
+            <div className="teaching-routine-bar">
+              <div className="teaching-routine-fill" style={{ width: routineProgress.homework + '%' }}></div>
+            </div>
+            <div className="teaching-routine-percent">{routineProgress.homework}%</div>
+          </div>
+        </div>
+      </div>
+
+      {/* 快捷操作 */}
+      <div className="teaching-card">
+        <div className="teaching-card-title">
+          <span>⚡</span> 快捷操作
+        </div>
+        <div className="teaching-quick-grid">
+          {quickActions.map(act => (
+            <button
+              key={act.label}
+              className="teaching-quick-btn"
+              onClick={() => handleQuickAction(act.label)}
+            >
+              <span className="teaching-quick-icon">{act.icon}</span>
+              <span className="teaching-quick-label">{act.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ==========================================================
+   子页面：专业课程 TeachingCourses
+   ========================================================== */
+
+function TeachingCourses({ courses, teachingClasses, archives, allTeachers }) {
+  const [typeFilter, setTypeFilter] = React.useState('all');
+
+  const courseTypes = React.useMemo(() => {
+    const types = new Set();
+    courses.forEach(c => {
+      const t = c.fields['课程类型'] || c.fields['类型'] || '未分类';
+      types.add(t);
+    });
+    return Array.from(types);
+  }, [courses]);
+
+  const filteredCourses = React.useMemo(() => {
+    if (typeFilter === 'all') return courses;
+    return courses.filter(c =>
+      (c.fields['课程类型'] || c.fields['类型'] || '未分类') === typeFilter
+    );
+  }, [courses, typeFilter]);
+
+  // 每门课的授课教师（从教学班关联）
+  const getCourseTeachers = (courseId) => {
+    const relatedClasses = teachingClasses.filter(c => {
+      const cid = c.fields['课程'];
+      return Array.isArray(cid) ? cid.includes(courseId) : cid === courseId;
+    });
+    const teacherIds = new Set();
+    relatedClasses.forEach(c => {
+      const tids = c.fields['授课教师'];
+      if (Array.isArray(tids)) tids.forEach(id => teacherIds.add(id));
+      else if (tids) teacherIds.add(tids);
+    });
+    return allTeachers.filter(t => teacherIds.has(t.record_id));
+  };
+
+  // 每门课的大纲完成度（从课程档案统计）
+  const getCourseProgress = (courseId) => {
+    const courseArchives = archives.filter(a => {
+      const cid = a.fields['课程'];
+      return Array.isArray(cid) ? cid.includes(courseId) : cid === courseId;
+    });
+    if (courseArchives.length === 0) return 0;
+    const done = courseArchives.filter(a => a.fields['大纲状态'] === '已完成').length;
+    return Math.round((done / courseArchives.length) * 100);
+  };
+
+  return (
+    <div className="teaching-courses">
+      <div className="teaching-toolbar">
+        <div className="teaching-filter-group">
+          <button
+            className={'teaching-filter-btn' + (typeFilter === 'all' ? ' active' : '')}
+            onClick={() => setTypeFilter('all')}
+          >
+            全部类型
+          </button>
+          {courseTypes.map(t => (
+            <button
+              key={t}
+              className={'teaching-filter-btn' + (typeFilter === t ? ' active' : '')}
+              onClick={() => setTypeFilter(t)}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        <div className="teaching-toolbar-right">
+          <span className="teaching-count">共 {filteredCourses.length} 门课程</span>
+        </div>
+      </div>
+
+      {filteredCourses.length === 0 ? (
+        <div className="teaching-empty-card">
+          <div className="teaching-empty-icon">📚</div>
+          <div className="teaching-empty-text">暂无课程数据</div>
+        </div>
+      ) : (
+        <div className="teaching-course-grid">
+          {filteredCourses.map(course => {
+            const f = course.fields;
+            const courseTeachers = getCourseTeachers(course.record_id);
+            const progress = getCourseProgress(course.record_id);
+            const type = f['课程类型'] || f['类型'] || '未分类';
+            const code = f['课程代码'] || f['课程编号'] || '';
+            const hours = f['学时'] || f['总学时'] || '';
+            const credits = f['学分'] || '';
+
+            return (
+              <div key={course.record_id} className="teaching-course-card">
+                <div className="teaching-course-header">
+                  <h3 className="teaching-course-name">{f['课程名称'] || f['名称'] || '未命名课程'}</h3>
+                  <span className="teaching-course-type">{type}</span>
+                </div>
+                {code && <div className="teaching-course-code">课程代码：{code}</div>}
+                <div className="teaching-course-meta">
+                  {hours && <span>📖 {hours}学时</span>}
+                  {credits && <span>⭐ {credits}学分</span>}
+                </div>
+                <div className="teaching-course-teachers">
+                  <span className="teaching-course-teachers-label">授课教师：</span>
+                  {courseTeachers.length > 0 ? (
+                    courseTeachers.map(t => (
+                      <span key={t.record_id} className="teaching-teacher-chip">
+                        {t.fields['姓名'] || t.fields['教师姓名'] || '未知'}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="teaching-muted">未分配</span>
+                  )}
+                </div>
+                <div className="teaching-course-progress">
+                  <div className="teaching-progress-bar-sm">
+                    <div className="teaching-progress-fill-sm" style={{ width: progress + '%' }}></div>
+                  </div>
+                  <span className="teaching-progress-text">大纲完成 {progress}%</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ==========================================================
+   子页面：任课教师 TeachingTeachers
+   ========================================================== */
+
+function TeachingTeachers({ teachers, teachingClasses }) {
+  const getTeacherCourseCount = (teacherId) => {
+    return teachingClasses.filter(c => {
+      const tids = c.fields['授课教师'];
+      return Array.isArray(tids) ? tids.includes(teacherId) : tids === teacherId;
+    }).length;
+  };
+
+  return (
+    <div className="teaching-teachers">
+      <div className="teaching-toolbar">
+        <span className="teaching-count">共 {teachers.length} 位任课教师</span>
+      </div>
+
+      {teachers.length === 0 ? (
+        <div className="teaching-empty-card">
+          <div className="teaching-empty-icon">👨‍🏫</div>
+          <div className="teaching-empty-text">本学期暂无任课教师</div>
+        </div>
+      ) : (
+        <div className="teaching-teacher-grid">
+          {teachers.map(teacher => {
+            const f = teacher.fields;
+            const courseCount = getTeacherCourseCount(teacher.record_id);
+            const name = f['姓名'] || f['教师姓名'] || '未知';
+            const title = f['职称'] || f['教师职称'] || '';
+            const research = f['研究方向'] || f['研究领域'] || '';
+
+            return (
+              <div key={teacher.record_id} className="teaching-teacher-card">
+                <div className="teaching-teacher-avatar">
+                  {name.charAt(0)}
+                </div>
+                <div className="teaching-teacher-info">
+                  <h3 className="teaching-teacher-name">{name}</h3>
+                  {title && <div className="teaching-teacher-title">{title}</div>}
+                  {research && <div className="teaching-teacher-research">{research}</div>}
+                  <div className="teaching-teacher-stats">
+                    <span className="teaching-teacher-stat">
+                      <strong>{courseCount}</strong> 门授课
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ==========================================================
+   子页面：课程档案 TeachingArchives
+   ========================================================== */
+
+function TeachingArchives({ archives, allCourses, allTeachers }) {
+  const [typeFilter, setTypeFilter] = React.useState('all');
+
+  const archiveTypes = React.useMemo(() => {
+    const types = new Set();
+    archives.forEach(a => {
+      const t = a.fields['档案类型'] || a.fields['类型'] || '未分类';
+      types.add(t);
+    });
+    return Array.from(types);
+  }, [archives]);
+
+  const filteredArchives = React.useMemo(() => {
+    if (typeFilter === 'all') return archives;
+    return archives.filter(a =>
+      (a.fields['档案类型'] || a.fields['类型'] || '未分类') === typeFilter
+    );
+  }, [archives, typeFilter]);
+
+  const getCourseName = (courseId) => {
+    if (!courseId) return '';
+    const course = allCourses.find(c => c.record_id === courseId);
+    return course ? (course.fields['课程名称'] || course.fields['名称'] || '') : '';
+  };
+
+  const getStatusColor = (status) => {
+    const map = {
+      '已完成': 'tag-green',
+      '进行中': 'tag-blue',
+      '待开始': 'tag-gray',
+      '已逾期': 'tag-red',
+      '搁置': 'tag-yellow',
+    };
+    return map[status] || 'tag-gray';
+  };
+
+  return (
+    <div className="teaching-archives">
+      <div className="teaching-toolbar">
+        <div className="teaching-filter-group">
+          <button
+            className={'teaching-filter-btn' + (typeFilter === 'all' ? ' active' : '')}
+            onClick={() => setTypeFilter('all')}
+          >
+            全部类型
+          </button>
+          {archiveTypes.map(t => (
+            <button
+              key={t}
+              className={'teaching-filter-btn' + (typeFilter === t ? ' active' : '')}
+              onClick={() => setTypeFilter(t)}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        <div className="teaching-toolbar-right">
+          <span className="teaching-count">共 {filteredArchives.length} 份档案</span>
+        </div>
+      </div>
+
+      {filteredArchives.length === 0 ? (
+        <div className="teaching-empty-card">
+          <div className="teaching-empty-icon">📁</div>
+          <div className="teaching-empty-text">暂无档案数据</div>
+        </div>
+      ) : (
+        <div className="teaching-archive-list">
+          {filteredArchives.map(archive => {
+            const f = archive.fields;
+            const name = f['档案名称'] || f['名称'] || '未命名';
+            const type = f['档案类型'] || f['类型'] || '未分类';
+            const status = f['状态'] || f['档案状态'] || '待开始';
+            const owner = f['负责人'] || f['档案负责人'] || '';
+            
+            // 关联课程
+            const courseIds = f['课程'];
+            let courseName = '';
+            if (Array.isArray(courseIds) && courseIds.length > 0) {
+              courseName = getCourseName(courseIds[0]);
+            } else if (courseIds) {
+              courseName = getCourseName(courseIds);
+            }
+
+            const dueDate = f['截止日期'] || f['完成期限'] || '';
+
+            return (
+              <div key={archive.record_id} className="teaching-archive-item">
+                <div className="teaching-archive-icon">📄</div>
+                <div className="teaching-archive-content">
+                  <div className="teaching-archive-name">{name}</div>
+                  <div className="teaching-archive-meta">
+                    {courseName && <span>课程：{courseName}</span>}
+                    {type && <span>类型：{type}</span>}
+                    {owner && <span>负责人：{owner}</span>}
+                    {dueDate && <span>截止：{formatDate(dueDate)}</span>}
+                  </div>
+                </div>
+                <span className={`tag ${getStatusColor(status)}`}>{status}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ==========================================================
+   子页面：教师档案（全量数据）TeachingTeacherArchive
+   ========================================================== */
+
+function TeachingTeacherArchive({ teachers }) {
+  const [statusFilter, setStatusFilter] = React.useState('all');
+
+  const statusOptions = ['在职', '外出进修', '调离', '退休'];
+
+  const filteredTeachers = React.useMemo(() => {
+    if (statusFilter === 'all') return teachers;
+    return teachers.filter(t => (t.fields['状态'] || '在职') === statusFilter);
+  }, [teachers, statusFilter]);
+
+  const getStatusClass = (status) => {
+    const map = {
+      '在职': 'teaching-status-active',
+      '外出进修': 'teaching-status-leave',
+      '调离': 'teaching-status-inactive',
+      '退休': 'teaching-status-inactive',
+    };
+    return map[status] || 'teaching-status-active';
+  };
+
+  return (
+    <div className="teaching-teacher-archive">
+      <div className="teaching-toolbar">
+        <div className="teaching-filter-group">
+          <button
+            className={'teaching-filter-btn' + (statusFilter === 'all' ? ' active' : '')}
+            onClick={() => setStatusFilter('all')}
+          >
+            全部
+          </button>
+          {statusOptions.map(s => (
+            <button
+              key={s}
+              className={'teaching-filter-btn' + (statusFilter === s ? ' active' : '')}
+              onClick={() => setStatusFilter(s)}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+        <div className="teaching-toolbar-right">
+          <span className="teaching-count">共 {filteredTeachers.length} 位教师</span>
+        </div>
+      </div>
+
+      {filteredTeachers.length === 0 ? (
+        <div className="teaching-empty-card">
+          <div className="teaching-empty-icon">👥</div>
+          <div className="teaching-empty-text">暂无教师数据</div>
+        </div>
+      ) : (
+        <div className="teaching-teacher-grid">
+          {filteredTeachers.map(teacher => {
+            const f = teacher.fields;
+            const name = f['姓名'] || f['教师姓名'] || '未知';
+            const title = f['职称'] || f['教师职称'] || '';
+            const position = f['教研室职务'] || f['职务'] || '';
+            const status = f['状态'] || '在职';
+            const joinDate = f['入职时间'] || f['入职日期'] || '';
+
+            return (
+              <div key={teacher.record_id} className={`teaching-teacher-card ${getStatusClass(status)}`}>
+                <div className="teaching-teacher-avatar">
+                  {name.charAt(0)}
+                </div>
+                <div className="teaching-teacher-info">
+                  <h3 className="teaching-teacher-name">
+                    {name}
+                    <span className={`teaching-teacher-status-dot dot-${status === '在职' ? 'green' : status === '外出进修' ? 'yellow' : 'gray'}`}></span>
+                  </h3>
+                  {title && <div className="teaching-teacher-title">{title}</div>}
+                  {position && <div className="teaching-teacher-research">{position}</div>}
+                  <div className="teaching-teacher-stats">
+                    <span className="teaching-teacher-stat">
+                      状态：<strong style={{
+                        color: status === '在职' ? '#4ade80' : status === '外出进修' ? '#fbbf24' : '#6b7280'
+                      }}>{status}</strong>
+                    </span>
+                    {joinDate && (
+                      <span className="teaching-teacher-stat">
+                        入职：{formatDate(joinDate)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ==========================================================
+   组件：占位页 TeachingPlaceholder
+   ========================================================== */
+
+function TeachingPlaceholder({ title, icon }) {
+  return (
+    <div className="teaching-placeholder">
+      <div className="teaching-placeholder-icon">{icon}</div>
+      <h3 className="teaching-placeholder-title">{title}</h3>
+      <p className="teaching-placeholder-text">功能开发中，敬请期待</p>
+    </div>
+  );
+}
+
 
 function App() {
   const [unlocked, setUnlocked] = useState(isUnlocked());
@@ -1761,7 +4656,12 @@ function App() {
             <Route
               key={m.key}
               path={m.path}
-              element={<ModulePage moduleName={m.key} icon={m.icon} color={m.color} />}
+              element={m.path === '/finance' 
+                ? <FinancePage />
+                : m.path === '/teaching'
+                  ? <TeachingPage />
+                  : <ModulePage moduleName={m.key} icon={m.icon} color={m.color} modulePath={m.path} moduleHidden={m.hidden} />
+              }
             />
           ))}
         </Routes>
@@ -1775,3 +4675,9 @@ function App() {
    ========================================================== */
 
 // 入口在 index.html 的 debug_wrapper 中（ErrorBoundary 包裹）
+
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<ErrorBoundary><App /></ErrorBoundary>);
+
+  
