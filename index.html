@@ -369,7 +369,7 @@ window.apmPlus("start");
   border-radius: 10px;
 }
 
-    /* ========== 通知信息消化中心 ========== */
+    /* ========== 通知信息消化中心 v2 ========== */
     .notification-page { padding: 20px; animation: fadeIn 0.3s ease; }
     .notification-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 16px 20px; background: rgba(255,255,255,0.03); border-radius: 12px; border: 1px solid rgba(255,255,255,0.06); }
     .notification-header-left { display: flex; align-items: center; gap: 12px; }
@@ -6002,7 +6002,7 @@ function NotificationList({ notifications, categories, onView, onRefresh }) {
                       </div>
                     </div>
                   </div>
-                  <div className="notif-card-deadline">⏰ {formatCountdown(dlVal)}</div>
+                  <div className="notif-card-deadline">⏰ {formatCountdown(dlVal)} <span style={{fontSize:'10px',opacity:0.5}}>[raw: {String(dlVal).slice(0,20)}]</span></div>
                   <div className="notif-card-progress">
                     <div className="notif-card-progress-bar" style={{ width: `${progress}%` }}></div>
                   </div>
