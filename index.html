@@ -3053,8 +3053,8 @@ function ModulePage({ moduleName, icon, color, modulePath }) {
       const sA = statusOrder[a.fields['任务状态']] ?? 5;
       const sB = statusOrder[b.fields['任务状态']] ?? 5;
       if (sA !== sB) return sA - sB;
-      const aDate = Array.isArray(a.fields['截止时间']) ? a.fields['截止时间'][0] : a.fields['截止时间'] || 0;
-      const bDate = Array.isArray(b.fields['截止时间']) ? b.fields['截止时间'][0] : b.fields['截止时间'] || 0;
+      const aDate = parseDeadline(a.fields['截止时间'])?.getTime() || 0;
+      const bDate = parseDeadline(b.fields['截止时间'])?.getTime() || 0;
       if (aDate && bDate) return aDate - bDate;
       if (aDate) return -1;
       if (bDate) return 1;
@@ -5296,6 +5296,21 @@ const URGENCY_LEVELS = [
 ];
 
 // 根据截止时间计算紧急程度
+
+// 解析截止时间（兼容毫秒字符串/ISO字符串/数组/时间戳）
+function parseDeadline(val) {
+  if (!val) return null;
+  if (Array.isArray(val)) val = val[0];
+  if (!val) return null;
+  // 如果是纯数字字符串（毫秒时间戳）
+  if (typeof val === 'string' && /^\d+$/.test(val)) {
+    const n = Number(val);
+    if (n > 1e12) return new Date(n); // 毫秒
+    if (n > 1e9) return new Date(n * 1000); // 秒
+  }
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? null : d;
+}
 function calcUrgency(deadline, createdAt) {
   if (!deadline) return URGENCY_LEVELS[2]; // 默认常规
   const now = new Date();
@@ -5331,8 +5346,9 @@ function formatCountdown(deadline) {
 
 // 计算工作时间内的剩余时间（简化版）
 function calcWorkingTimeLeft(deadline) {
-  if (!deadline) return { text: '无截止时间', percent: 0 };
-  return { text: formatCountdown(deadline), percent: 0 };
+  const d = parseDeadline(deadline);
+  if (!d) return { text: '无截止时间', percent: 0 };
+  return { text: formatCountdown(d), percent: 0 };
 }
 
 // 进度偏差算法
@@ -5957,13 +5973,13 @@ function NotificationList({ notifications, categories, onView, onRefresh }) {
         <div className="notif-list">
           {filtered.map(n => {
             const title = n.fields['标题'] || n.fields['通知标题'] || '未命名通知';
-            const category = n.fields['分类'] || '';
+            const category = n.fields['通知分类'] || n.fields['分类'] || '';
             const dl = n.fields['截止时间'];
             const dlVal = Array.isArray(dl) ? dl[0] : dl;
             const urgency = calcUrgency(dlVal);
             const status = n.fields['状态'] || n.fields['通知状态'] || '待处理';
-            const source = n.fields['来源'] || '';
-            const progress = Number(n.fields['进度'] || n.fields['任务进度'] || 0);
+            const source = n.fields['通知来源'] || n.fields['来源'] || '';
+            const progress = Number(n.fields['完成进度'] || n.fields['进度'] || n.fields['任务进度'] || 0);
             const createdAt = n.created_time || n.fields['创建时间'] || '';
 
             return (
@@ -6469,7 +6485,7 @@ function NotificationQuickAddModal({ categories, onClose, onSuccess }) {
                       >
                         <div className="notif-work-item-title">{title}</div>
                         <div className="notif-work-item-meta">
-                          {deadline ? `截止：${new Date(deadline).toLocaleDateString('zh-CN')}` : '无截止时间'}
+                          {parseDeadline(deadline) ? `截止：${parseDeadline(deadline).toLocaleDateString('zh-CN')}` : '无截止时间'}
                           <span className={`notif-tag ${status === '已完成' ? 'green' : status === '进行中' ? 'blue' : 'yellow'}`}>{status}</span>
                         </div>
                       </div>
