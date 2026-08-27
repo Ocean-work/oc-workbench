@@ -583,6 +583,51 @@ window.apmPlus("start");
 
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     @keyframes modalIn { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+        /* 教学任务关联相关 */
+    .notif-teaching-work-selector { display: flex; align-items: center; gap: 8px; }
+    .notif-work-selected {
+      display: flex; align-items: center; justify-content: space-between;
+      width: 100%; padding: 8px 12px;
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 8px; font-size: 13px;
+    }
+    .notif-link-btn {
+      background: none; border: none; color: #60a5fa;
+      cursor: pointer; font-size: 12px; padding: 0;
+    }
+    .notif-link-btn:hover { text-decoration: underline; }
+    .notif-work-picker { width: 480px; max-height: 70vh; }
+    .notif-work-list { max-height: 50vh; overflow-y: auto; }
+    .notif-work-item {
+      padding: 12px 14px; border-radius: 8px;
+      cursor: pointer; transition: all 0.2s;
+      border: 1px solid transparent; margin-bottom: 8px;
+      background: rgba(255,255,255,0.03);
+    }
+    .notif-work-item:hover {
+      background: rgba(59, 130, 246, 0.08);
+      border-color: rgba(59, 130, 246, 0.2);
+    }
+    .notif-work-item.selected {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: rgba(59, 130, 246, 0.5);
+    }
+    .notif-work-item-title {
+      font-size: 14px; font-weight: 500; color: #e5e7eb;
+      margin-bottom: 4px;
+    }
+    .notif-work-item-meta {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 12px; color: #9ca3af;
+    }
+    .notif-teaching-link {
+      color: #60a5fa; cursor: pointer; font-size: 13px;
+      text-decoration: none; transition: color 0.2s;
+    }
+    .notif-teaching-link:hover {
+      color: #93c5fd; text-decoration: underline;
+    }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     </style>
 </head>
@@ -5569,6 +5614,7 @@ function NotificationPage() {
       {showQuickAdd && (
         <NotificationQuickAddModal
           categories={data.categories}
+          teachingWorks={data.teachingWorks || []}
           onClose={() => setShowQuickAdd(false)}
           onSuccess={() => { setShowQuickAdd(false); loadData(); }}
         />
@@ -5581,6 +5627,7 @@ function NotificationPage() {
           tasks={data.tasks}
           files={data.files}
           reminders={data.reminders}
+          teachingWorks={data.teachingWorks || []}
           onClose={() => setSelectedNotif(null)}
         />
       )}
@@ -6392,6 +6439,48 @@ function NotificationQuickAddModal({ categories, onClose, onSuccess }) {
           </button>
         </div>
       </div>
+
+      {/* 教学任务选择器 */}
+      {showWorkPicker && (
+        <div className="notif-modal-overlay" onClick={() => setShowWorkPicker(false)}>
+          <div className="notif-modal notif-work-picker" onClick={e => e.stopPropagation()}>
+            <div className="notif-modal-header">
+              <h3 className="notif-modal-title">📚 选择教学任务</h3>
+              <button className="notif-modal-close" onClick={() => setShowWorkPicker(false)}>×</button>
+            </div>
+            <div className="notif-modal-body">
+              {teachingWorks.length === 0 ? (
+                <div className="notif-empty">暂无教学任务数据</div>
+              ) : (
+                <div className="notif-work-list">
+                  {teachingWorks.map(w => {
+                    const title = w.fields['工作标题'] || w.fields['标题'] || '未命名';
+                    const status = w.fields['状态'] || '待执行';
+                    const deadline = w.fields['截止日期'];
+                    const isSelected = formData.teachingWorkId === w.record_id;
+                    return (
+                      <div
+                        key={w.record_id}
+                        className={`notif-work-item ${isSelected ? 'selected' : ''}`}
+                        onClick={() => {
+                          setFormData({...formData, teachingWorkId: w.record_id});
+                          setShowWorkPicker(false);
+                        }}
+                      >
+                        <div className="notif-work-item-title">{title}</div>
+                        <div className="notif-work-item-meta">
+                          {deadline ? `截止：${new Date(deadline).toLocaleDateString('zh-CN')}` : '无截止时间'}
+                          <span className={`notif-tag ${status === '已完成' ? 'green' : status === '进行中' ? 'blue' : 'yellow'}`}>{status}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -6400,7 +6489,7 @@ function NotificationQuickAddModal({ categories, onClose, onSuccess }) {
    子组件：通知详情抽屉
    ========================================================== */
 
-function NotificationDetailDrawer({ notification, tasks, files, reminders, onClose }) {
+function NotificationDetailDrawer({ notification, tasks, files, reminders, teachingWorks, onClose }) {
   const f = notification.fields;
   const title = f['标题'] || f['通知标题'] || '未命名通知';
   const content = f['内容'] || f['通知内容'] || '';
@@ -6418,6 +6507,12 @@ function NotificationDetailDrawer({ notification, tasks, files, reminders, onClo
   const relatedTaskIds = f['关联任务'] || f['任务'] || [];
   const taskIds = Array.isArray(relatedTaskIds) ? relatedTaskIds : (relatedTaskIds ? [relatedTaskIds] : []);
   const relatedTasks = tasks.filter(t => taskIds.includes(t.record_id));
+
+  // 关联教学任务
+  const relatedTeachingWorkId = f['关联教学任务'] || '';
+  const relatedTeachingWork = teachingWorks && relatedTeachingWorkId
+    ? teachingWorks.find(w => w.record_id === relatedTeachingWorkId)
+    : null;
 
   // 进度偏差
   const deviation = calcProgressDeviation(createdAt, dlVal, progress);
@@ -6463,6 +6558,20 @@ function NotificationDetailDrawer({ notification, tasks, files, reminders, onClo
                 }}>
                   {deviation.level === 'critical' ? '🔴 告警' : deviation.level === 'warning' ? '🟡 预警' : '🟢 正常'}
                   {' '}({deviation.deviation > 0 ? '+' : ''}{deviation.deviation}%)
+                </div>
+              </div>
+              <div className="notif-detail-meta-item">
+                <div className="notif-detail-meta-label">关联教学任务</div>
+                <div className="notif-detail-meta-value">
+                  {relatedTeachingWork ? (
+                    <span className="notif-teaching-link" onClick={() => {
+                      window.location.hash = '/teaching';
+                    }}>
+                      📚 {relatedTeachingWork.fields['工作标题'] || relatedTeachingWork.fields['标题'] || '未命名'}
+                    </span>
+                  ) : (
+                    <span style={{color:'#6b7280'}}>未关联</span>
+                  )}
                 </div>
               </div>
               <div className="notif-detail-meta-item">
