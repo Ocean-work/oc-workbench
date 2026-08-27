@@ -5315,10 +5315,10 @@ function parseDeadline(val) {
   return isNaN(d.getTime()) ? null : d;
 }
 function calcUrgency(deadline, createdAt) {
-  if (!deadline) return URGENCY_LEVELS[2]; // 默认常规
+  const d = parseDeadline(deadline);
+  if (!d) return URGENCY_LEVELS[2]; // 默认常规
   const now = new Date();
-  const deadlineDate = new Date(deadline);
-  const diffMs = deadlineDate - now;
+  const diffMs = d - now;
   const diffHours = diffMs / (1000 * 60 * 60);
   for (const level of URGENCY_LEVELS) {
     if (level.maxHours !== undefined && diffHours <= level.maxHours) {
@@ -5356,10 +5356,11 @@ function calcWorkingTimeLeft(deadline) {
 
 // 进度偏差算法
 function calcProgressDeviation(createdAt, deadline, taskProgress) {
-  if (!createdAt || !deadline) return { level: 'normal', deviation: 0 };
+  const d = parseDeadline(deadline);
+  if (!createdAt || !d) return { level: 'normal', deviation: 0 };
   const now = Date.now();
   const createTime = new Date(createdAt).getTime();
-  const deadTime = new Date(deadline).getTime();
+  const deadTime = d.getTime();
   const totalDuration = deadTime - createTime;
   if (totalDuration <= 0) return { level: 'normal', deviation: 0 };
   const timeProgress = Math.min(100, Math.max(0, ((now - createTime) / totalDuration) * 100));
