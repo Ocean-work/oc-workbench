@@ -871,12 +871,15 @@ function parseVersionHistory(text) {
 // 飞书单选字段返回对象数组 [{text: "值"}] 或 [{name: "值"}]，多选同理
 // 该函数统一处理：字符串直接返回，数组取第一个元素的 text/name，其他返回空字符串
 function getFieldValue(fieldValue) {
-  if (!fieldValue) return '';
+  if (fieldValue === null || fieldValue === undefined) return '';
   if (typeof fieldValue === 'string') return fieldValue;
+  if (typeof fieldValue === 'number') return fieldValue; // 数字类型（如datetime毫秒时间戳）
+  if (typeof fieldValue === 'boolean') return fieldValue;
   if (Array.isArray(fieldValue)) {
     const first = fieldValue[0];
-    if (!first) return '';
+    if (first === null || first === undefined) return '';
     if (typeof first === 'string') return first;
+    if (typeof first === 'number') return first;
     return first.text || first.name || '';
   }
   return '';
