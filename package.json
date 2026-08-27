@@ -1,0 +1,23 @@
+{
+  "name": "oc-console-v2",
+  "version": "1.0.0",
+  "description": "",
+  "main": "fix_view.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://Ocean-work@github.com/Ocean-work/oc-workbench.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Ocean-work/oc-workbench/issues"
+  },
+  "homepage": "https://github.com/Ocean-work/oc-workbench#readme",
+  "dependencies": {
+    "@babel/standalone": "^8.0.4"
+  }
+}

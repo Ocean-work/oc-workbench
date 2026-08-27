@@ -1,0 +1,214 @@
+function ModuleManagePage({ modules, onModulesChange }) {
+  const [showForm, setShowForm] = useState(false);
+  const [editingModule, setEditingModule] = useState(null);
+  const [formData, setFormData] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  const openAddForm = () => {
+    setEditingModule(null);
+    setFormData({
+      '模块名称': '',
+      '图标': '📁',
+      '主题色': 'blue',
+      '路径标识': '',
+      '排序': modules.length + 1,
+      '描述': '',
+    });
+    setShowForm(true);
+  };
+
+  // 模块名称变化时自动生成路径标识
+  const handleNameChange = (name) => {
+    const newData = { ...formData, '模块名称': name };
+    // 只有新建时才自动生成，编辑时保留原值
+    if (!editingModule) {
+      newData['路径标识'] = generatePathKey(name);
+    }
+    setFormData(newData);
+  };
+
+  const openEditForm = (mod) => {
+    setEditingModule(mod);
+    setFormData({
+      '模块名称': mod.key,
+      '图标': mod.icon,
+      '主题色': mod.color,
+      '路径标识': mod.pathKey,
+      '排序': mod.sort,
+      '描述': mod.description,
+    });
+    setShowForm(true);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData['模块名称']) {
+      alert('请填写模块名称');
+      return;
+    }
+    // 新建时校验路径标识（自动生成，一般不会空）
+    if (!editingModule && !formData['路径标识']) {
+      alert('路径标识生成失败，请重试');
+      return;
+    }
+    try {
+      setSaving(true);
+      if (editingModule) {
+        await updateModule(editingModule.record_id, formData);
+      } else {
+        await createModule(formData);
+      }
+      setShowForm(false);
+      onModulesChange();
+    } catch (err) {
+      alert('保存失败：' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (mod) => {
+    if (!confirm(`确定删除模块「${mod.key}」吗？\n\n注意：只会删除模块定义，该模块下的任务数据仍然保留在数据表中。`)) return;
+    try {
+      await deleteModule(mod.record_id);
+      onModulesChange();
+    } catch (err) {
+      alert('删除失败：' + err.message);
+    }
+  };
+
+  return (
+    <div className="module-manage-page">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">⚙️ 模块管理</h1>
+          <p className="page-subtitle">管理业务模块的名称、图标、颜色和排序</p>
+        </div>
+        <button className="btn btn-primary" onClick={openAddForm}>
+          + 新建模块
+        </button>
+      </div>
+
+      <div className="module-grid">
+        {modules.map(mod => (
+          <div key={mod.record_id || mod.key} className={`module-card card theme-${mod.color}`}>
+            <div className="module-card-header">
+              <span className="module-icon">{mod.icon}</span>
+              <h3 className="module-name">{mod.key}</h3>
+            </div>
+            {mod.description && (
+              <p className="module-desc text-secondary text-sm">{mod.description}</p>
+            )}
+            <div className="module-meta text-xs text-muted">
+              路径: /{mod.pathKey} · 排序: {mod.sort}
+            </div>
+            <div className="module-actions">
+              <button className="btn btn-secondary btn-sm" onClick={() => openEditForm(mod)}>✏️ 编辑</button>
+              <button className="btn btn-danger-ghost btn-sm" onClick={() => handleDelete(mod)}>🗑 删除</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {showForm && (
+        <div className="modal-overlay" onClick={() => setShowForm(false)}>
+          <div className="modal-content form-modal" onClick={e => e.stopPropagation()}>
+            <h2 className="form-title">{editingModule ? '编辑模块' : '新建模块'}</h2>
+            <form onSubmit={handleSubmit}>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>模块名称 *</label>
+                  <input
+                    type="text"
+                    value={formData['模块名称'] || ''}
+                    onChange={e => handleNameChange(e.target.value)}
+                    placeholder="如：教学管理"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>路径标识（自动生成）</label>
+                  <input
+                    type="text"
+                    value={formData['路径标识'] || ''}
+                    onChange={e => setFormData({ ...formData, '路径标识': e.target.value.replace(/[^a-zA-Z0-9-]/g, '') })}
+                    placeholder="英文小写，如 teaching"
+                    readOnly
+                    className="input-readonly"
+                    required
+                  />
+                  <div className="form-hint text-xs text-muted">
+                    {editingModule ? '创建后不可修改，用于网址定位' : '根据模块名称自动生成，创建后不可修改'}
+                  </div>
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>图标</label>
+                  <div className="icon-picker">
+                    {ICON_OPTIONS.map(ic => (
+                      <button
+                        key={ic}
+                        type="button"
+                        className={`icon-option ${formData['图标'] === ic ? 'active' : ''}`}
+                        onClick={() => setFormData({ ...formData, '图标': ic })}
+                      >
+                        {ic}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>主题色</label>
+                  <div className="color-picker">
+                    {COLOR_OPTIONS.map(c => (
+                      <button
+                        key={c}
+                        type="button"
+                        className={`color-option color-${c} ${formData['主题色'] === c ? 'active' : ''}`}
+                        onClick={() => setFormData({ ...formData, '主题色': c })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>排序</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData['排序'] || 1}
+                    onChange={e => setFormData({ ...formData, '排序': Number(e.target.value) })}
+                  />
+                </div>
+              </div>
+              <div className="form-group">
+                <label>描述</label>
+                <textarea
+                  value={formData['描述'] || ''}
+                  onChange={e => setFormData({ ...formData, '描述': e.target.value })}
+                  placeholder="模块说明..."
+                  rows={2}
+                />
+              </div>
+              <div className="form-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>
+                  取消
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>
+                  {saving ? '保存中...' : (editingModule ? '保存修改' : '创建模块')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ==========================================================
+   页面：总看板 Dashboard
+   ========================================================== */
+
