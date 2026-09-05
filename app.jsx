@@ -3544,6 +3544,16 @@ const TEACHING_CONFIG = {
   }
 };
 
+// 通知消化中心（独立多维表）
+const NOTIFICATION_CONFIG = {
+  appToken: 'E187bOY5taj8cZsL0NUc3fkAnod',
+  tables: {
+    main: 'tblveMgBNh5814hj',         // 通知主表
+    reminders: 'tblffwTxhc1JRTaV',    // 提醒记录表
+    category: 'tbl4wcjjcI0vggHQ',     // 分类配置表
+  }
+};
+
 // 通用：按条件搜索记录（全量拉取后 JS 过滤，保持与现有模式一致）
 async function fetchTeachingTable(tableKey) {
   const { appToken, tables } = TEACHING_CONFIG;
@@ -3576,6 +3586,34 @@ async function fetchAllTeachingData() {
     fetchTeachingTable('work'),
   ]);
   return { semesters, teachers, courses, classrooms, teachingClasses, archives, works };
+}
+
+// 获取通知消化中心数据
+async function fetchNotificationData() {
+  const { appToken, tables } = NOTIFICATION_CONFIG;
+  const fetchTable = async (tableKey) => {
+    const tableId = tables[tableKey];
+    if (!tableId) return [];
+    const allItems = [];
+    let pageToken = '';
+    let hasMore = true;
+    while (hasMore) {
+      const url = `/bitable/v1/apps/${appToken}/tables/${tableId}/records/search`;
+      const body = { page_size: 500 };
+      if (pageToken) body.page_token = pageToken;
+      const data = await feishuRequest(url, { method: 'POST', body: JSON.stringify(body) });
+      allItems.push(...(data.items || []));
+      hasMore = data.has_more;
+      pageToken = data.page_token || '';
+    }
+    return allItems.map(item => ({ ...item, fields: cleanFields(item.fields) }));
+  };
+  const [main, reminders, categories] = await Promise.all([
+    fetchTable('main'),
+    fetchTable('reminders'),
+    fetchTable('category'),
+  ]);
+  return { main, reminders, categories };
 }
 
 // 工具：从关联字段（record_id 数组）映射名称
@@ -3720,6 +3758,10 @@ function TeachingPage() {
     { key: 'classroom-archive', label: '教室档案', icon: '🚪' },
     { key: 'all-work', label: '全部工作', icon: '✅' },
     { key: 'all-resources', label: '全部资源', icon: '📦' },
+  ];
+
+  const toolsNavItems = [
+    { key: 'notifications', label: '通知中心', icon: '🔔' },
   ];
 
   // 当前学期相关的过滤数据
@@ -3898,6 +3940,22 @@ function TeachingPage() {
                 </div>
               ))}
             </div>
+
+            <div className="teaching-nav-group">
+              <div className="teaching-nav-group-title">
+                <span>🛠</span> 工具
+              </div>
+              {toolsNavItems.map(item => (
+                <div
+                  key={item.key}
+                  className={'teaching-nav-item' + (activeNav === item.key ? ' active' : '')}
+                  onClick={() => navigateTo(item.key)}
+                >
+                  <span className="teaching-nav-icon">{item.icon}</span>
+                  <span className="teaching-nav-label">{item.label}</span>
+                </div>
+              ))}
+            </div>
           </aside>
 
           {/* 右侧内容 */}
@@ -3953,6 +4011,9 @@ function TeachingPage() {
             )}
             {activeNav === 'all-resources' && (
               <TeachingPlaceholder title="全部资源" icon="📦" />
+            )}
+            {activeNav === 'notifications' && (
+              <TeachingNotifications />
             )}
           </main>
         </div>
@@ -4590,6 +4651,286 @@ function TeachingTeacherArchive({ teachers }) {
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ==========================================================
+   子页面：通知中心 TeachingNotifications
+   ========================================================== */
+
+function TeachingNotifications() {
+  const [data, setData] = React.useState({ main: [], reminders: [], categories: [] });
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState('');
+  const [detailRecord, setDetailRecord] = React.useState(null);
+  const [filter, setFilter] = React.useState({ status: 'all', category: 'all', urgency: 'all', search: '' });
+
+  const loadData = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const result = await fetchNotificationData();
+      setData(result);
+    } catch (e) {
+      setError('加载失败：' + (e.message || '未知错误'));
+    }
+    setLoading(false);
+  };
+
+  React.useEffect(() => { loadData(); }, []);
+
+  // 从URL参数中读取notif_id，数据加载后自动打开对应通知详情
+  // 支持 hash 路由格式：#/teaching/notifications?notif_id=xxx
+  React.useEffect(() => {
+    if (!data.main || data.main.length === 0) return;
+    const hash = window.location.hash || '';
+    const qIndex = hash.indexOf('?');
+    if (qIndex === -1) return;
+    const qs = hash.substring(qIndex + 1);
+    const params = new URLSearchParams(qs);
+    const notifId = params.get('notif_id');
+    if (!notifId) return;
+    const target = data.main.find(r => r.record_id === notifId);
+    if (target) {
+      setDetailRecord(target);
+    }
+  }, [data.main]);
+
+  const filtered = React.useMemo(() => {
+    let result = [...data.main];
+    if (filter.status !== 'all') {
+      result = result.filter(r => r.fields['通知状态'] === filter.status);
+    }
+    if (filter.category !== 'all') {
+      result = result.filter(r => r.fields['通知分类'] === filter.category);
+    }
+    if (filter.urgency !== 'all') {
+      result = result.filter(r => r.fields['紧急程度'] === filter.urgency);
+    }
+    if (filter.search) {
+      const kw = filter.search.toLowerCase();
+      result = result.filter(r =>
+        (r.fields['通知标题'] || '').toLowerCase().includes(kw) ||
+        (r.fields['通知内容'] || '').toLowerCase().includes(kw)
+      );
+    }
+    // 按收到时间倒序
+    result.sort((a, b) => {
+      const ta = a.fields['收到时间'] || 0;
+      const tb = b.fields['收到时间'] || 0;
+      return tb - ta;
+    });
+    return result;
+  }, [data.main, filter]);
+
+  const stats = React.useMemo(() => {
+    const total = data.main.length;
+    const unfinished = data.main.filter(r => r.fields['通知状态'] !== '已完成').length;
+    const urgent = data.main.filter(r => r.fields['紧急程度'] === '🔴特急' || r.fields['紧急程度'] === '🟠紧急').length;
+    return { total, unfinished, urgent };
+  }, [data.main]);
+
+  const categories = React.useMemo(() => {
+    const set = new Set();
+    data.main.forEach(r => { if (r.fields['通知分类']) set.add(r.fields['通知分类']); });
+    return Array.from(set);
+  }, [data.main]);
+
+  const getUrgencyColor = (u) => {
+    return {
+      '🔴特急': 'tag-red',
+      '🟠紧急': 'tag-orange',
+      '🟡常规': 'tag-yellow',
+      '🟢中期': 'tag-green',
+      '🔵远期': 'tag-blue',
+    }[u] || 'tag-gray';
+  };
+
+  const getStatusColor = (s) => {
+    return {
+      '未开始': 'tag-gray',
+      '进行中': 'tag-blue',
+      '已完成': 'tag-green',
+      '已过期': 'tag-red',
+      '搁置': 'tag-yellow',
+    }[s] || 'tag-gray';
+  };
+
+  const formatNotifDate = (ts) => {
+    if (!ts) return '—';
+    const d = new Date(ts);
+    const now = new Date();
+    const isSameYear = d.getFullYear() === now.getFullYear();
+    if (isSameYear) {
+      return `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    }
+    return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+  };
+
+  return (
+    <div className="teaching-notifications">
+      <div className="teaching-toolbar">
+        <div className="teaching-filter-group">
+          <button
+            className={'teaching-filter-btn' + (filter.status === 'all' ? ' active' : '')}
+            onClick={() => setFilter(f => ({ ...f, status: 'all' }))}
+          >全部</button>
+          <button
+            className={'teaching-filter-btn' + (filter.status === '进行中' ? ' active' : '')}
+            onClick={() => setFilter(f => ({ ...f, status: '进行中' }))}
+          >进行中</button>
+          <button
+            className={'teaching-filter-btn' + (filter.status === '已完成' ? ' active' : '')}
+            onClick={() => setFilter(f => ({ ...f, status: '已完成' }))}
+          >已完成</button>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginLeft: 16, alignItems: 'center' }}>
+          <select
+            className="teaching-filter-select"
+            value={filter.category}
+            onChange={e => setFilter(f => ({ ...f, category: e.target.value }))}
+          >
+            <option value="all">全部分类</option>
+            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select
+            className="teaching-filter-select"
+            value={filter.urgency}
+            onChange={e => setFilter(f => ({ ...f, urgency: e.target.value }))}
+          >
+            <option value="all">全部紧急程度</option>
+            <option value="🔴特急">🔴特急</option>
+            <option value="🟠紧急">🟠紧急</option>
+            <option value="🟡常规">🟡常规</option>
+            <option value="🟢中期">🟢中期</option>
+          </select>
+        </div>
+        <div className="teaching-toolbar-right">
+          <input
+            type="text"
+            className="teaching-search-input"
+            placeholder="搜索通知标题或内容..."
+            value={filter.search}
+            onChange={e => setFilter(f => ({ ...f, search: e.target.value }))}
+            style={{ width: 200, padding: '6px 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#fff' }}
+          />
+          <span className="teaching-count" style={{ marginLeft: 12 }}>共 {filtered.length} 条</span>
+          <button className="teaching-btn primary" onClick={loadData} style={{ marginLeft: 12 }}>🔄 刷新</button>
+        </div>
+      </div>
+
+      {/* 统计卡片 */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
+        <div className="teaching-card" style={{ padding: 16 }}>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>通知总数</div>
+          <div style={{ fontSize: 24, fontWeight: 600 }}>{stats.total}</div>
+        </div>
+        <div className="teaching-card" style={{ padding: 16 }}>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>未完成</div>
+          <div style={{ fontSize: 24, fontWeight: 600, color: '#f5a623' }}>{stats.unfinished}</div>
+        </div>
+        <div className="teaching-card" style={{ padding: 16 }}>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>紧急/特急</div>
+          <div style={{ fontSize: 24, fontWeight: 600, color: '#f87171' }}>{stats.urgent}</div>
+        </div>
+      </div>
+
+      {loading && <div className="teaching-loading">加载中...</div>}
+      {error && <div className="teaching-empty-card"><div className="teaching-empty-text" style={{ color: '#f87171' }}>{error}</div></div>}
+
+      {!loading && !error && filtered.length === 0 && (
+        <div className="teaching-empty-card">
+          <div className="teaching-empty-icon">🔔</div>
+          <div className="teaching-empty-text">暂无通知</div>
+        </div>
+      )}
+
+      {!loading && !error && filtered.length > 0 && (
+        <div className="notif-list">
+          {filtered.map(notif => {
+            const f = notif.fields;
+            const content = f['通知内容'] || '';
+            const preview = content.length > 100 ? content.substring(0, 100) + '...' : content;
+            const status = f['通知状态'] || '未开始';
+            return (
+              <div
+                key={notif.record_id}
+                className="notif-card"
+                onClick={() => setDetailRecord(notif)}
+              >
+                <div className="notif-card-header">
+                  <div className="notif-card-title">{f['通知标题'] || '未命名'}</div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {f['紧急程度'] && <span className={`tag ${getUrgencyColor(f['紧急程度'])}`}>{f['紧急程度']}</span>}
+                    {status && <span className={`tag ${getStatusColor(status)}`}>{status}</span>}
+                  </div>
+                </div>
+                <div className="notif-card-meta">
+                  <span>📋 {f['通知分类'] || '未分类'}</span>
+                  <span>📅 收到：{formatNotifDate(f['收到时间'])}</span>
+                  {f['截止时间'] && <span>⏰ 截止：{formatNotifDate(f['截止时间'])}</span>}
+                  {f['完成进度'] !== undefined && f['完成进度'] !== null && <span>📊 进度 {f['完成进度']}%</span>}
+                </div>
+                <div className="notif-card-preview">{preview || '（无内容）'}</div>
+                {content.length > 100 && <div className="notif-card-more">点击查看完整内容 →</div>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 详情弹窗 */}
+      {detailRecord && (
+        <div className="modal-overlay" onClick={() => setDetailRecord(null)}>
+          <div className="modal-content notif-detail-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 style={{ margin: 0, fontSize: 18 }}>{detailRecord.fields['通知标题'] || '未命名'}</h2>
+              <button className="modal-close" onClick={() => setDetailRecord(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                {detailRecord.fields['紧急程度'] && (
+                  <span className={`tag ${getUrgencyColor(detailRecord.fields['紧急程度'])}`}>
+                    {detailRecord.fields['紧急程度']}
+                  </span>
+                )}
+                {detailRecord.fields['通知分类'] && (
+                  <span className="tag tag-cyan">{detailRecord.fields['通知分类']}</span>
+                )}
+                {detailRecord.fields['通知状态'] && (
+                  <span className={`tag ${getStatusColor(detailRecord.fields['通知状态'])}`}>
+                    {detailRecord.fields['通知状态']}
+                  </span>
+                )}
+                {detailRecord.fields['通知来源'] && (
+                  <span className="tag tag-gray">来源：{detailRecord.fields['通知来源']}</span>
+                )}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16, fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
+                <div>📅 收到时间：{formatNotifDate(detailRecord.fields['收到时间'])}</div>
+                <div>⏰ 截止时间：{formatNotifDate(detailRecord.fields['截止时间'])}</div>
+                <div>📊 完成进度：{detailRecord.fields['完成进度'] ?? 0}%</div>
+                {detailRecord.fields['发送人/来源群'] && <div>👤 发送人：{detailRecord.fields['发送人/来源群']}</div>}
+              </div>
+              <div className="notif-detail-divider">📝 通知正文</div>
+              <div className="notif-detail-content">
+                {(detailRecord.fields['通知内容'] || '（无内容）').split('\n').map((line, i) => (
+                  <div key={i}>{line || '\u00A0'}</div>
+                ))}
+              </div>
+              {detailRecord.fields['备注'] && (
+                <>
+                  <div className="notif-detail-divider" style={{ marginTop: 16 }}>💭 备注</div>
+                  <div className="notif-detail-content" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                    {detailRecord.fields['备注']}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

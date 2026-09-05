@@ -629,6 +629,91 @@ window.apmPlus("start");
       color: #93c5fd; text-decoration: underline;
     }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+    /* ========== 日报中心 ========== */
+    .daily-page { padding: 20px; animation: fadeIn 0.3s ease; }
+    .daily-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 16px 20px; background: rgba(255,255,255,0.03); border-radius: 12px; border: 1px solid rgba(255,255,255,0.06); }
+    .daily-header-left { display: flex; align-items: center; gap: 12px; }
+    .daily-header-icon { font-size: 28px; }
+    .daily-header-title { font-size: 20px; font-weight: 600; color: var(--text-primary, #e0e0e0); margin: 0; }
+    .daily-header-sub { font-size: 13px; color: var(--text-secondary, #8b8b9e); margin-top: 4px; }
+    .daily-header-right { display: flex; gap: 10px; align-items: center; }
+
+    .daily-layout { display: flex; gap: 16px; min-height: calc(100vh - 200px); }
+    .daily-sidebar { width: 220px; flex-shrink: 0; background: rgba(255,255,255,0.02); border-radius: 12px; padding: 12px; border: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; max-height: calc(100vh - 180px); }
+    .daily-sidebar-top { margin-bottom: 12px; display: flex; gap: 8px; }
+    .daily-today-btn { flex: 1; padding: 8px 12px; border: none; background: linear-gradient(135deg, rgba(245,200,66,0.2), rgba(245,200,66,0.08)); color: #f5c842; font-size: 13px; font-weight: 500; border-radius: 8px; cursor: pointer; transition: all 0.2s; border: 1px solid rgba(245,200,66,0.3); }
+    .daily-today-btn:hover { background: linear-gradient(135deg, rgba(245,200,66,0.3), rgba(245,200,66,0.12)); transform: translateY(-1px); }
+
+    .daily-date-list { flex: 1; overflow-y: auto; padding-right: 4px; }
+    .daily-date-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; color: var(--text-secondary, #8b8b9e); font-size: 13px; transition: all 0.2s; margin-bottom: 4px; }
+    .daily-date-item:hover { background: rgba(255,255,255,0.05); color: var(--text-primary, #e0e0e0); }
+    .daily-date-item.active { background: linear-gradient(135deg, rgba(245,200,66,0.15), rgba(245,200,66,0.05)); color: #f5c842; border: 1px solid rgba(245,200,66,0.3); }
+    .daily-date-item.today .daily-date-main { font-weight: 600; }
+    .daily-date-main { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+    .daily-date-day { font-size: 13px; font-weight: 500; }
+    .daily-date-week { font-size: 11px; opacity: 0.7; }
+    .daily-date-status { font-size: 12px; flex-shrink: 0; }
+    .daily-date-status.confirmed { color: #4ade80; }
+    .daily-date-status.unconfirmed { color: #f87171; }
+    .daily-date-status.no-data { color: var(--text-muted, #5a5a6e); font-size: 10px; }
+
+    .daily-content { flex: 1; min-width: 0; background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); overflow: hidden; display: flex; flex-direction: column; }
+
+    .daily-detail-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-bottom: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.02); }
+    .daily-detail-title { display: flex; flex-direction: column; gap: 6px; }
+    .daily-detail-date { font-size: 22px; font-weight: 700; color: var(--text-primary, #e0e0e0); }
+    .daily-detail-week { font-size: 13px; color: var(--text-secondary, #8b8b9e); }
+    .daily-detail-actions { display: flex; gap: 10px; align-items: center; }
+    .daily-status-tag { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+    .daily-status-tag.confirmed { background: rgba(74,222,128,0.15); color: #4ade80; }
+    .daily-status-tag.unconfirmed { background: rgba(248,113,113,0.15); color: #f87171; }
+
+    .daily-detail-body { padding: 20px 24px; overflow-y: auto; flex: 1; }
+    .daily-section { margin-bottom: 24px; }
+    .daily-section-title { font-size: 15px; font-weight: 600; color: var(--text-primary, #e0e0e0); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+    .daily-section-title::before { content: ''; width: 3px; height: 16px; background: linear-gradient(180deg, #f5c842, #e6a817); border-radius: 2px; }
+    .daily-section-title.readonly { opacity: 0.8; }
+    .daily-section-title.readonly::before { background: linear-gradient(180deg, #64748b, #475569); }
+
+    .daily-field-group { margin-bottom: 16px; }
+    .daily-field-label { font-size: 13px; color: var(--text-secondary, #8b8b9e); margin-bottom: 6px; font-weight: 500; }
+    .daily-field-value { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 12px 14px; font-size: 13px; color: var(--text-primary, #e0e0e0); line-height: 1.7; white-space: pre-wrap; min-height: 60px; }
+    .daily-field-value.empty { color: var(--text-muted, #5a5a6e); font-style: italic; }
+    .daily-field-textarea { width: 100%; min-height: 100px; padding: 12px 14px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: var(--text-primary, #e0e0e0); font-size: 13px; line-height: 1.7; outline: none; resize: vertical; box-sizing: border-box; font-family: inherit; transition: border-color 0.2s; }
+    .daily-field-textarea:focus { border-color: rgba(245,200,66,0.4); background: rgba(255,255,255,0.05); }
+
+    .daily-detail-footer { padding: 16px 24px; border-top: 1px solid rgba(255,255,255,0.06); display: flex; justify-content: flex-end; gap: 10px; background: rgba(0,0,0,0.2); }
+
+    .daily-btn { padding: 8px 18px; border-radius: 8px; font-size: 13px; cursor: pointer; border: none; transition: all 0.2s; font-weight: 500; }
+    .daily-btn.primary { background: linear-gradient(135deg, #f5c842, #e6a817); color: #0f0f1a; }
+    .daily-btn.primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(245,200,66,0.3); }
+    .daily-btn.secondary { background: rgba(255,255,255,0.08); color: var(--text-secondary, #8b8b9e); }
+    .daily-btn.secondary:hover { background: rgba(255,255,255,0.12); color: var(--text-primary, #e0e0e0); }
+    .daily-btn.success { background: linear-gradient(135deg, #22c55e, #16a34a); color: white; }
+    .daily-btn.success:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(34,197,94,0.3); }
+    .daily-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+
+    .daily-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 20px; color: var(--text-secondary, #8b8b9e); }
+    .daily-empty-icon { font-size: 56px; margin-bottom: 16px; opacity: 0.4; }
+    .daily-empty-text { font-size: 15px; margin-bottom: 20px; }
+    .daily-loading { text-align: center; padding: 60px; color: var(--text-secondary, #8b8b9e); }
+    .daily-spinner { width: 32px; height: 32px; border: 3px solid rgba(255,255,255,0.1); border-top-color: #f5c842; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+
+    /* 滚动条美化 */
+    .daily-date-list::-webkit-scrollbar { width: 4px; }
+    .daily-date-list::-webkit-scrollbar-track { background: transparent; }
+    .daily-date-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+    .daily-date-list::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+    .daily-detail-body::-webkit-scrollbar { width: 6px; }
+    .daily-detail-body::-webkit-scrollbar-track { background: transparent; }
+    .daily-detail-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+    .daily-detail-body::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+    /* 保存提示 */
+    .daily-save-hint { font-size: 12px; color: var(--text-muted, #5a5a6e); margin-right: auto; display: flex; align-items: center; gap: 6px; }
+    .daily-save-hint .dot { width: 6px; height: 6px; border-radius: 50%; background: #f5c842; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
     </style>
 </head>
 <body>
@@ -669,9 +754,15 @@ class ErrorBoundary extends React.Component {
 const { useState, useEffect, useMemo, useRef } = React;
 // 极简 hash 路由实现
 function useHashRoute() {
-  const [hash, setHash] = React.useState(window.location.hash.slice(1) || '/');
+  const getCleanPath = () => {
+    const raw = window.location.hash.slice(1) || '/';
+    // 去掉 query string，只保留路径部分用于路由匹配
+    const qIndex = raw.indexOf('?');
+    return qIndex === -1 ? raw : raw.substring(0, qIndex);
+  };
+  const [hash, setHash] = React.useState(getCleanPath());
   React.useEffect(() => {
-    const handler = () => setHash(window.location.hash.slice(1) || '/');
+    const handler = () => setHash(getCleanPath());
     window.addEventListener('hashchange', handler);
     return () => window.removeEventListener('hashchange', handler);
   }, []);
@@ -710,6 +801,7 @@ function Route({ path, element }) { return null; }
 // 默认模块列表（降级用，实际从飞书表加载）
 const DEFAULT_MODULES = [
   { key: '通知信息消化中心', icon: '🔔', color: 'red', path: '/notification' },
+  { key: '日报中心', icon: '📔', color: 'yellow', path: '/daily' },
   { key: '教学管理', icon: '📚', color: 'blue', path: '/teaching' },
   { key: '自媒体运营', icon: '✨', color: 'purple', path: '/media' },
   { key: '国际中文教学', icon: '🌏', color: 'cyan', path: '/chinese' },
@@ -4291,6 +4383,66 @@ function calcSemesterProgress(semester) {
   return { currentWeek, totalWeeks, percent };
 }
 
+
+// 工作名称字段三级 fallback：工作名称 / 工作标题 / 标题
+function getWorkName(fields) {
+  return fields['工作名称'] || fields['工作标题'] || fields['标题'] || '未命名';
+}
+
+// 计算学期教学检查周期（期初/期中/期末）
+function getSemesterCheckCycles(semester) {
+  if (!semester) return [];
+  const f = semester.fields;
+  const totalWeeks = Number(f['总周数']) || 18;
+  const startDate = f['开始日期'] ? new Date(f['开始日期']) : new Date();
+  
+  const addWeeks = (date, weeks) => {
+    const d = new Date(date);
+    d.setDate(d.getDate() + weeks * 7);
+    return d;
+  };
+  
+  return [
+    {
+      name: '期初教学检查',
+      startWeek: 1,
+      endWeek: 3,
+      startDate: startDate,
+      endDate: addWeeks(startDate, 3),
+      color: '#f59e0b',
+      icon: '📋',
+      desc: '开学初教学秩序与准备工作检查'
+    },
+    {
+      name: '期中教学检查',
+      startWeek: 8,
+      endWeek: 10,
+      startDate: addWeeks(startDate, 7),
+      endDate: addWeeks(startDate, 10),
+      color: '#3b82f6',
+      icon: '🔍',
+      desc: '中期教学质量与进度检查'
+    },
+    {
+      name: '期末教学检查',
+      startWeek: 15,
+      endWeek: 18,
+      startDate: addWeeks(startDate, 14),
+      endDate: addWeeks(startDate, 18),
+      color: '#ef4444',
+      icon: '📝',
+      desc: '期末考核与教学总结检查'
+    }
+  ];
+}
+
+function getCurrentCheckCycle(semester) {
+  const cycles = getSemesterCheckCycles(semester);
+  const progress = calcSemesterProgress(semester);
+  const week = progress.currentWeek;
+  return cycles.find(c => week >= c.startWeek && week <= c.endWeek) || null;
+}
+
 /* ==========================================================
    组件：教学管理模块 TeachingPage
    ========================================================== */
@@ -4611,7 +4763,7 @@ function TeachingPage() {
               <TeachingPlaceholder title="教室档案" icon="🚪" />
             )}
             {activeNav === 'all-work' && (
-              <TeachingPlaceholder title="全部工作" icon="✅" />
+              <TeachingAllWorks works={data.works} semesters={data.semesters} />
             )}
             {activeNav === 'all-resources' && (
               <TeachingPlaceholder title="全部资源" icon="📦" />
@@ -4743,6 +4895,9 @@ function TeachingOverview({ semester, semesterData, allData }) {
           </div>
         </div>
       </div>
+
+      {/* 学期教学检查周期时间轴 */}
+      <SemesterCheckTimeline semester={semester} />
 
       <div className="teaching-grid-2col">
         {/* 本周工作 */}
@@ -5258,6 +5413,269 @@ function TeachingTeacherArchive({ teachers }) {
   );
 }
 
+
+/* ==========================================================
+   子页面：全部工作列表 TeachingAllWorks
+   ========================================================== */
+
+function TeachingAllWorks({ works, semesters }) {
+  const [categoryFilter, setCategoryFilter] = React.useState('all');
+  const [statusFilter, setStatusFilter] = React.useState('all');
+  const [semesterFilter, setSemesterFilter] = React.useState('all');
+  const [searchText, setSearchText] = React.useState('');
+
+  const categories = React.useMemo(() => {
+    const set = new Set();
+    works.forEach(w => {
+      const c = w.fields['分类'] || w.fields['工作分类'] || '未分类';
+      set.add(c);
+    });
+    return Array.from(set);
+  }, [works]);
+
+  const statuses = React.useMemo(() => {
+    const set = new Set();
+    works.forEach(w => {
+      const s = w.fields['状态'] || '待执行';
+      set.add(s);
+    });
+    return Array.from(set);
+  }, [works]);
+
+  const filteredWorks = React.useMemo(() => {
+    return works.filter(w => {
+      if (categoryFilter !== 'all') {
+        const cat = w.fields['分类'] || w.fields['工作分类'] || '未分类';
+        if (cat !== categoryFilter) return false;
+      }
+      if (statusFilter !== 'all') {
+        const st = w.fields['状态'] || '待执行';
+        if (st !== statusFilter) return false;
+      }
+      if (semesterFilter !== 'all') {
+        const sems = w.fields['所属学期'];
+        const semArr = Array.isArray(sems) ? sems : (sems ? [sems] : []);
+        if (!semArr.includes(semesterFilter)) return false;
+      }
+      if (searchText) {
+        const name = getWorkName(w.fields);
+        const detail = w.fields['工作详情'] || w.fields['详情'] || '';
+        if (!name.includes(searchText) && !detail.includes(searchText)) return false;
+      }
+      return true;
+    }).sort((a, b) => (b.fields['截止日期'] || 0) - (a.fields['截止日期'] || 0));
+  }, [works, categoryFilter, statusFilter, semesterFilter, searchText]);
+
+  const getSemesterName = (semIds) => {
+    if (!semIds) return '—';
+    const ids = Array.isArray(semIds) ? semIds : [semIds];
+    const names = ids.map(id => {
+      const s = semesters.find(sem => sem.record_id === id);
+      return s ? s.fields['学期名称'] : id;
+    });
+    return names.join('、');
+  };
+
+  return (
+    <div className="teaching-all-works">
+      <div className="teaching-card">
+        <div className="teaching-card-title">
+          <span>✅</span> 全部工作
+          <span className="teaching-card-badge">{filteredWorks.length}</span>
+        </div>
+
+        <div className="teaching-filter-bar">
+          <div className="teaching-filter-group">
+            <span className="teaching-filter-label">分类</span>
+            <button
+              className={'teaching-filter-btn' + (categoryFilter === 'all' ? ' active' : '')}
+              onClick={() => setCategoryFilter('all')}
+            >
+              全部
+            </button>
+            {categories.map(c => (
+              <button
+                key={c}
+                className={'teaching-filter-btn' + (categoryFilter === c ? ' active' : '')}
+                onClick={() => setCategoryFilter(c)}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+
+          <div className="teaching-filter-group">
+            <span className="teaching-filter-label">状态</span>
+            <button
+              className={'teaching-filter-btn' + (statusFilter === 'all' ? ' active' : '')}
+              onClick={() => setStatusFilter('all')}
+            >
+              全部
+            </button>
+            {statuses.map(s => (
+              <button
+                key={s}
+                className={'teaching-filter-btn' + (statusFilter === s ? ' active' : '')}
+                onClick={() => setStatusFilter(s)}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+
+          <div className="teaching-filter-group">
+            <span className="teaching-filter-label">学期</span>
+            <button
+              className={'teaching-filter-btn' + (semesterFilter === 'all' ? ' active' : '')}
+              onClick={() => setSemesterFilter('all')}
+            >
+              全部
+            </button>
+            {semesters.map(s => (
+              <button
+                key={s.record_id}
+                className={'teaching-filter-btn' + (semesterFilter === s.record_id ? ' active' : '')}
+                onClick={() => setSemesterFilter(s.record_id)}
+              >
+                {s.fields['学期名称'] || '未命名'}
+              </button>
+            ))}
+          </div>
+
+          <div className="teaching-filter-search">
+            <input
+              type="text"
+              placeholder="搜索工作名称..."
+              value={searchText}
+              onChange={e => setSearchText(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {filteredWorks.length === 0 ? (
+          <div className="teaching-empty">暂无符合条件的工作</div>
+        ) : (
+          <div className="teaching-work-table">
+            <div className="teaching-work-table-head">
+              <div className="tw-col-name">工作名称</div>
+              <div className="tw-col-cat">分类</div>
+              <div className="tw-col-status">状态</div>
+              <div className="tw-col-priority">优先级</div>
+              <div className="tw-col-due">截止日期</div>
+              <div className="tw-col-sem">所属学期</div>
+            </div>
+            <div className="teaching-work-table-body">
+              {filteredWorks.map(w => {
+                const status = w.fields['状态'] || '待执行';
+                const priority = w.fields['优先级'] || '中';
+                return (
+                  <div key={w.record_id} className="teaching-work-table-row">
+                    <div className="tw-col-name">
+                      <div className="tw-work-name">{getWorkName(w.fields)}</div>
+                      {w.fields['工作详情'] && (
+                        <div className="tw-work-detail">{w.fields['工作详情']}</div>
+                      )}
+                    </div>
+                    <div className="tw-col-cat">
+                      {w.fields['分类'] || w.fields['工作分类'] || '—'}
+                    </div>
+                    <div className="tw-col-status">
+                      <span className={'tag ' + (STATUS_COLORS[status] || 'tag-gray')}>
+                        {status}
+                      </span>
+                    </div>
+                    <div className="tw-col-priority">
+                      <span className={'tag ' + (PRIORITY_COLORS[priority] || 'tag-gray')}>
+                        {priority}
+                      </span>
+                    </div>
+                    <div className="tw-col-due">
+                      {formatDate(w.fields['截止日期']) || '—'}
+                    </div>
+                    <div className="tw-col-sem">
+                      {getSemesterName(w.fields['所属学期'])}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ==========================================================
+   组件：学期教学检查周期时间轴 SemesterCheckTimeline
+   ========================================================== */
+
+function SemesterCheckTimeline({ semester }) {
+  const cycles = getSemesterCheckCycles(semester);
+  const progress = calcSemesterProgress(semester);
+  const currentWeek = progress.currentWeek;
+  const totalWeeks = progress.totalWeeks || 18;
+
+  if (cycles.length === 0) return null;
+
+  const currentCycle = getCurrentCheckCycle(semester);
+
+  return (
+    <div className="teaching-card">
+      <div className="teaching-card-title">
+        <span>📅</span> 学期教学检查周期
+        {currentCycle && (
+          <span className="teaching-card-badge" style={{ background: currentCycle.color + '22', color: currentCycle.color }}>
+            当前：{currentCycle.name}
+          </span>
+        )}
+      </div>
+      
+      <div className="check-timeline">
+        <div className="check-timeline-track">
+          {cycles.map((c, i) => {
+            const leftPct = ((c.startWeek - 1) / totalWeeks) * 100;
+            const widthPct = ((c.endWeek - c.startWeek + 1) / totalWeeks) * 100;
+            const isActive = currentWeek >= c.startWeek && currentWeek <= c.endWeek;
+            return (
+              <div
+                key={c.name}
+                className={'check-cycle-segment' + (isActive ? ' active' : '')}
+                style={{
+                  left: leftPct + '%',
+                  width: widthPct + '%',
+                  background: c.color + '33',
+                  borderColor: c.color,
+                }}
+              >
+                <div className="check-cycle-icon" style={{ color: c.color }}>{c.icon}</div>
+                <div className="check-cycle-name">{c.name}</div>
+                <div className="check-cycle-weeks">第{c.startWeek}-{c.endWeek}周</div>
+              </div>
+            );
+          })}
+          
+          {currentWeek > 0 && (
+            <div
+              className="check-timeline-marker"
+              style={{ left: ((currentWeek - 1) / totalWeeks) * 100 + '%' }}
+            >
+              <div className="check-marker-dot"></div>
+              <div className="check-marker-label">第{currentWeek}周</div>
+            </div>
+          )}
+        </div>
+        
+        <div className="check-timeline-ruler">
+          <span>第1周</span>
+          <span>第{Math.floor(totalWeeks/2)}周</span>
+          <span>第{totalWeeks}周</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ==========================================================
    组件：占位页 TeachingPlaceholder
    ========================================================== */
@@ -5272,6 +5690,607 @@ function TeachingPlaceholder({ title, icon }) {
   );
 }
 
+
+
+/* ==========================================================
+   日报中心 DailyPage
+   ========================================================== */
+
+const DAILY_CONFIG = {
+  appToken: 'ZGcrbdAztars3CsTFtAcUciLn9e',
+  tableId: 'tblIGRAi03nsw8Sm',
+};
+
+// 获取最近N天的日期数组（倒序）
+function getRecentDays(n) {
+  const days = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (let i = 0; i < n; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    days.push(d);
+  }
+  return days;
+}
+
+// 获取星期几的中文
+function getWeekdayCN(date) {
+  const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  return weekdays[date.getDay()];
+}
+
+// 格式化日期为 YYYY-MM-DD
+function fmtDateStr(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+// 拉取日报表数据（最近N天）
+async function fetchDailyRecords(days = 30) {
+  const { appToken, tableId } = DAILY_CONFIG;
+  const allItems = [];
+  let pageToken = '';
+  let hasMore = true;
+  try {
+    while (hasMore) {
+      const url = `/bitable/v1/apps/${appToken}/tables/${tableId}/records/search`;
+      const body = { page_size: 500 };
+      if (pageToken) body.page_token = pageToken;
+      const data = await feishuRequest(url, { method: 'POST', body: JSON.stringify(body) });
+      allItems.push(...(data.items || []));
+      hasMore = data.has_more;
+      pageToken = data.page_token || '';
+    }
+  } catch (e) {
+    console.warn('拉取日报表失败:', e.message);
+    return [];
+  }
+  return allItems.map(item => {
+    const cleaned = cleanFields(item.fields);
+    // 日期字段统一转为 YYYY-MM-DD 字符串
+    if (cleaned['日期']) {
+      const ts = Array.isArray(cleaned['日期']) ? cleaned['日期'][0] : cleaned['日期'];
+      if (typeof ts === 'number') {
+        cleaned['日期'] = fmtDateStr(new Date(ts));
+      }
+    }
+    return { ...item, fields: cleaned };
+  });
+}
+
+// 将日期字段转为飞书API接受的格式（毫秒时间戳）
+function _convertDateField(fields) {
+  const result = { ...fields };
+  if (result['日期'] && typeof result['日期'] === 'string') {
+    result['日期'] = new Date(result['日期'] + 'T00:00:00').getTime();
+  }
+  return result;
+}
+
+// 创建日报记录
+async function createDailyRecord(fields) {
+  const { appToken, tableId } = DAILY_CONFIG;
+  const data = await feishuRequest(
+    `/bitable/v1/apps/${appToken}/tables/${tableId}/records`,
+    { method: 'POST', body: JSON.stringify({ fields: _convertDateField(fields) }) }
+  );
+  const item = data.record;
+  const cleaned = cleanFields(item.fields);
+  if (cleaned['日期']) {
+    const ts = Array.isArray(cleaned['日期']) ? cleaned['日期'][0] : cleaned['日期'];
+    if (typeof ts === 'number') cleaned['日期'] = fmtDateStr(new Date(ts));
+  }
+  return { ...item, fields: cleaned };
+}
+
+// 更新日报记录
+async function updateDailyRecord(recordId, fields) {
+  const { appToken, tableId } = DAILY_CONFIG;
+  const data = await feishuRequest(
+    `/bitable/v1/apps/${appToken}/tables/${tableId}/records/${recordId}`,
+    { method: 'PUT', body: JSON.stringify({ fields: _convertDateField(fields) }) }
+  );
+  const item = data.record;
+  const cleaned = cleanFields(item.fields);
+  if (cleaned['日期']) {
+    const ts = Array.isArray(cleaned['日期']) ? cleaned['日期'][0] : cleaned['日期'];
+    if (typeof ts === 'number') cleaned['日期'] = fmtDateStr(new Date(ts));
+  }
+  return { ...item, fields: cleaned };
+}
+
+// 从通知模块拉取当日数据（已完成任务、进行中任务、今日会议）
+// 注：此为骨架创建时的占位函数，实际数据来源由后端/自动化脚本填充
+function buildDailySkeleton(dateStr, weekday) {
+  return {
+    '日期': dateStr,
+    '星期': weekday,
+    '已完成任务': '',
+    '进行中任务': '',
+    '新增任务': '',
+    '今日会议': '',
+    '临时工作': '',
+    '明日计划': '',
+    '反思备注': '',
+    '日报状态': '未确认',
+    '计划已推送': false,
+  };
+}
+
+/* ==========================================================
+   组件：日报中心主页面
+   ========================================================== */
+
+function DailyPage() {
+  const { path } = useHashRoute();
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [selectedDate, setSelectedDate] = useState('');
+  const [editData, setEditData] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [hasUnsaved, setHasUnsaved] = useState(false);
+
+  // 模块锁定状态
+  const [moduleLocked, setModuleLocked] = useState(false);
+  const [moduleUnlocked, setModuleUnlocked] = useState(false);
+  const [showLockModal, setShowLockModal] = useState(false);
+
+  const modulePath = '/daily';
+
+  const refreshModuleLock = () => {
+    const locked = isModuleLocked(modulePath);
+    setModuleLocked(locked);
+    setModuleUnlocked(locked ? isSessionUnlocked(modulePath) : true);
+  };
+
+  useEffect(() => {
+    refreshModuleLock();
+    const onStorage = () => refreshModuleLock();
+    const onLockChange = () => refreshModuleLock();
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('oc_lock_changed', onLockChange);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('oc_lock_changed', onLockChange);
+    };
+  }, []);
+
+  const handleModuleUnlock = () => {
+    setSessionUnlocked(modulePath, true);
+    setModuleUnlocked(true);
+    setShowLockModal(false);
+  };
+
+  // 从URL参数解析日期
+  const getDateFromHash = () => {
+    const hash = window.location.hash || '';
+    const qIndex = hash.indexOf('?');
+    if (qIndex === -1) return null;
+    const qs = hash.substring(qIndex + 1);
+    const params = new URLSearchParams(qs);
+    return params.get('date');
+  };
+
+  const loadData = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await fetchDailyRecords(30);
+      setRecords(data);
+
+      // 设置选中日期
+      const dateFromUrl = getDateFromHash();
+      const today = fmtDateStr(new Date());
+      if (dateFromUrl) {
+        setSelectedDate(dateFromUrl);
+      } else {
+        setSelectedDate(today);
+      }
+    } catch (e) {
+      setError('加载失败：' + (e.message || '未知错误'));
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadData(); }, []);
+
+  // 监听hash变化中的date参数
+  useEffect(() => {
+    const dateFromUrl = getDateFromHash();
+    if (dateFromUrl && dateFromUrl !== selectedDate) {
+      setSelectedDate(dateFromUrl);
+    }
+  }, [path]);
+
+  // 选中日期变化时，重置编辑状态
+  useEffect(() => {
+    if (!selectedDate || records.length === 0) return;
+    const record = records.find(r => r.fields['日期'] === selectedDate);
+    if (record) {
+      setEditData({
+        '临时工作': record.fields['临时工作'] || '',
+        '明日计划': record.fields['明日计划'] || '',
+        '反思备注': record.fields['反思备注'] || '',
+      });
+    } else {
+      setEditData({ '临时工作': '', '明日计划': '', '反思备注': '' });
+    }
+    setHasUnsaved(false);
+  }, [selectedDate, records]);
+
+  const handleDateSelect = (dateStr) => {
+    setSelectedDate(dateStr);
+    // 更新URL
+    const basePath = path.split('?')[0];
+    window.location.hash = `${basePath}?date=${dateStr}`;
+  };
+
+  const handleGoToday = () => {
+    const today = fmtDateStr(new Date());
+    handleDateSelect(today);
+  };
+
+  const handleFieldChange = (field, value) => {
+    setEditData(prev => ({ ...prev, [field]: value }));
+    setHasUnsaved(true);
+  };
+
+  const handleSave = async () => {
+    if (!selectedDate) return;
+    const record = records.find(r => r.fields['日期'] === selectedDate);
+
+    setSaving(true);
+    try {
+      if (record) {
+        // 更新现有记录
+        const updated = await updateDailyRecord(record.record_id, {
+          '临时工作': editData['临时工作'] || '',
+          '明日计划': editData['明日计划'] || '',
+          '反思备注': editData['反思备注'] || '',
+        });
+        setRecords(prev => prev.map(r =>
+          r.record_id === record.record_id ? updated : r
+        ));
+      } else {
+        // 创建新记录（骨架）
+        const dateObj = new Date(selectedDate);
+        const weekday = getWeekdayCN(dateObj);
+        const fields = {
+          ...buildDailySkeleton(selectedDate, weekday),
+          '临时工作': editData['临时工作'] || '',
+          '明日计划': editData['明日计划'] || '',
+          '反思备注': editData['反思备注'] || '',
+        };
+        const created = await createDailyRecord(fields);
+        setRecords(prev => [...prev, created]);
+      }
+      setHasUnsaved(false);
+    } catch (e) {
+      alert('保存失败：' + (e.message || '未知错误'));
+    }
+    setSaving(false);
+  };
+
+  const handleCreateSkeleton = async () => {
+    if (!selectedDate) return;
+    const dateObj = new Date(selectedDate);
+    const weekday = getWeekdayCN(dateObj);
+    const fields = buildDailySkeleton(selectedDate, weekday);
+
+    setSaving(true);
+    try {
+      const created = await createDailyRecord(fields);
+      setRecords(prev => [...prev, created]);
+      setEditData({ '临时工作': '', '明日计划': '', '反思备注': '' });
+      setHasUnsaved(false);
+    } catch (e) {
+      alert('创建失败：' + (e.message || '未知错误'));
+    }
+    setSaving(false);
+  };
+
+  const handleConfirmDaily = async () => {
+    if (!selectedDate) return;
+    const record = records.find(r => r.fields['日期'] === selectedDate);
+    if (!record) return;
+
+    const currentStatus = record.fields['日报状态'];
+    const newStatus = currentStatus === '已确认' ? '未确认' : '已确认';
+
+    setSaving(true);
+    try {
+      const updated = await updateDailyRecord(record.record_id, {
+        '日报状态': newStatus,
+      });
+      setRecords(prev => prev.map(r =>
+        r.record_id === record.record_id ? updated : r
+      ));
+    } catch (e) {
+      alert('操作失败：' + (e.message || '未知错误'));
+    }
+    setSaving(false);
+  };
+
+  // 生成最近30天的日期列表（带状态）
+  const dateList = React.useMemo(() => {
+    const days = getRecentDays(30);
+    return days.map(date => {
+      const dateStr = fmtDateStr(date);
+      const record = records.find(r => r.fields['日期'] === dateStr);
+      let status = 'empty'; // empty / unconfirmed / confirmed
+      if (record) {
+        status = record.fields['日报状态'] === '已确认' ? 'confirmed' : 'unconfirmed';
+      }
+      return {
+        dateStr,
+        weekday: getWeekdayCN(date),
+        isToday: date.toDateString() === new Date().toDateString(),
+        status,
+      };
+    });
+  }, [records]);
+
+  const currentRecord = selectedDate
+    ? records.find(r => r.fields['日期'] === selectedDate)
+    : null;
+
+  const currentStatus = currentRecord?.fields['日报状态'] || '无数据';
+  const isConfirmed = currentStatus === '已确认';
+
+  // ========== 渲染 ==========
+  if (loading) {
+    return (
+      <div className="daily-page">
+        <div className="daily-loading">
+          <div className="daily-spinner"></div>
+          加载中...
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="daily-page">
+        <div style={{padding:'40px', textAlign:'center', color:'#f87171'}}>
+          {error}
+          <div style={{marginTop:'16px'}}>
+            <button className="daily-btn primary" onClick={loadData}>重试</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const confirmedCount = records.filter(r => r.fields['日报状态'] === '已确认').length;
+
+  return (
+    <div className="daily-page">
+      {/* 顶部栏 */}
+      <div className="daily-header">
+        <div className="daily-header-left">
+          <span className="daily-header-icon">📔</span>
+          <div>
+            <h1 className="daily-header-title">
+              日报中心
+              {moduleLocked && <span className="page-lock-icon" title="模块已锁定">🔒</span>}
+            </h1>
+            <div className="daily-header-sub">
+              {moduleLocked && !moduleUnlocked
+                ? '此模块已锁定，请解锁后查看内容'
+                : `近30天 · ${records.length} 份日报 · ${confirmedCount} 份已确认`}
+            </div>
+          </div>
+        </div>
+        <div className="daily-header-right">
+          {moduleLocked && !moduleUnlocked && (
+            <button className="btn btn-warning" onClick={() => setShowLockModal(true)}>
+              🔓 解锁模块
+            </button>
+          )}
+          {(!moduleLocked || moduleUnlocked) && (
+            <button className="daily-btn primary" onClick={loadData}>🔄 刷新</button>
+          )}
+        </div>
+      </div>
+
+      {/* 模块锁定 - 大锁界面 */}
+      {moduleLocked && !moduleUnlocked && (
+        <div className="module-lock-screen">
+          <div className="module-lock-content">
+            <div
+              className="module-lock-big-icon-only"
+              onClick={() => setShowLockModal(true)}
+              title="点击解锁"
+            >
+              🔒
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 主内容区 */}
+      {(!moduleLocked || moduleUnlocked) && (
+        <div className="daily-layout">
+          {/* 左侧日期列表 */}
+          <aside className="daily-sidebar">
+            <div className="daily-sidebar-top">
+              <button className="daily-today-btn" onClick={handleGoToday}>📅 今日</button>
+            </div>
+            <div className="daily-date-list">
+              {dateList.map(item => (
+                <div
+                  key={item.dateStr}
+                  className={
+                    'daily-date-item' +
+                    (selectedDate === item.dateStr ? ' active' : '') +
+                    (item.isToday ? ' today' : '')
+                  }
+                  onClick={() => handleDateSelect(item.dateStr)}
+                >
+                  <div className="daily-date-main">
+                    <span className="daily-date-day">
+                      {item.isToday ? '今天 · ' : ''}
+                      {item.dateStr.slice(5)}
+                    </span>
+                    <span className="daily-date-week">{item.weekday}</span>
+                  </div>
+                  <span className={'daily-date-status ' + item.status}>
+                    {item.status === 'confirmed' ? '✓' :
+                     item.status === 'unconfirmed' ? '●' : '·'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </aside>
+
+          {/* 右侧详情区 */}
+          <main className="daily-content">
+            {currentRecord ? (
+              <>
+                <div className="daily-detail-header">
+                  <div className="daily-detail-title">
+                    <span className="daily-detail-date">{selectedDate}</span>
+                    <span className="daily-detail-week">
+                      {getWeekdayCN(new Date(selectedDate))}
+                    </span>
+                  </div>
+                  <div className="daily-detail-actions">
+                    <span className={'daily-status-tag ' + (isConfirmed ? 'confirmed' : 'unconfirmed')}>
+                      {isConfirmed ? '✓ 已确认' : '● 未确认'}
+                    </span>
+                    <button
+                      className={'daily-btn ' + (isConfirmed ? 'secondary' : 'success')}
+                      onClick={handleConfirmDaily}
+                      disabled={saving}
+                    >
+                      {isConfirmed ? '取消确认' : '确认日报'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="daily-detail-body">
+                  {/* 自动记录区（只读） */}
+                  <div className="daily-section">
+                    <h3 className="daily-section-title readonly">📚 自动记录区</h3>
+
+                    <div className="daily-field-group">
+                      <div className="daily-field-label">已完成任务</div>
+                      <div className={'daily-field-value' + (currentRecord.fields['已完成任务'] ? '' : ' empty')}>
+                        {currentRecord.fields['已完成任务'] || '暂无数据'}
+                      </div>
+                    </div>
+
+                    <div className="daily-field-group">
+                      <div className="daily-field-label">进行中任务</div>
+                      <div className={'daily-field-value' + (currentRecord.fields['进行中任务'] ? '' : ' empty')}>
+                        {currentRecord.fields['进行中任务'] || '暂无数据'}
+                      </div>
+                    </div>
+
+                    <div className="daily-field-group">
+                      <div className="daily-field-label">今日会议</div>
+                      <div className={'daily-field-value' + (currentRecord.fields['今日会议'] ? '' : ' empty')}>
+                        {currentRecord.fields['今日会议'] || '暂无数据'}
+                      </div>
+                    </div>
+
+                    {currentRecord.fields['新增任务'] && (
+                      <div className="daily-field-group">
+                        <div className="daily-field-label">新增任务</div>
+                        <div className="daily-field-value">
+                          {currentRecord.fields['新增任务']}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 可编辑区 */}
+                  <div className="daily-section">
+                    <h3 className="daily-section-title">✏️ 可编辑区</h3>
+
+                    <div className="daily-field-group">
+                      <label className="daily-field-label">临时工作</label>
+                      <textarea
+                        className="daily-field-textarea"
+                        value={editData['临时工作'] || ''}
+                        onChange={e => handleFieldChange('临时工作', e.target.value)}
+                        placeholder="记录今日临时处理的工作事项..."
+                      />
+                    </div>
+
+                    <div className="daily-field-group">
+                      <label className="daily-field-label">明日计划</label>
+                      <textarea
+                        className="daily-field-textarea"
+                        value={editData['明日计划'] || ''}
+                        onChange={e => handleFieldChange('明日计划', e.target.value)}
+                        placeholder="明日的工作计划安排..."
+                      />
+                    </div>
+
+                    <div className="daily-field-group">
+                      <label className="daily-field-label">反思备注</label>
+                      <textarea
+                        className="daily-field-textarea"
+                        value={editData['反思备注'] || ''}
+                        onChange={e => handleFieldChange('反思备注', e.target.value)}
+                        placeholder="今日反思、心得体会、改进方向..."
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="daily-detail-footer">
+                  {hasUnsaved && (
+                    <div className="daily-save-hint">
+                      <span className="dot"></span>
+                      有未保存的修改
+                    </div>
+                  )}
+                  <button
+                    className="daily-btn primary"
+                    onClick={handleSave}
+                    disabled={saving || !hasUnsaved}
+                  >
+                    {saving ? '保存中...' : '💾 保存'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="daily-empty">
+                <div className="daily-empty-icon">📝</div>
+                <div className="daily-empty-text">
+                  {selectedDate} 暂无日报记录
+                </div>
+                <button
+                  className="daily-btn primary"
+                  onClick={handleCreateSkeleton}
+                  disabled={saving}
+                >
+                  {saving ? '创建中...' : '+ 创建日报'}
+                </button>
+              </div>
+            )}
+          </main>
+        </div>
+      )}
+
+      {/* 模块锁定弹窗 */}
+      {showLockModal && (
+        <ModuleUnlockModal
+          title="解锁「日报中心」"
+          onClose={() => setShowLockModal(false)}
+          onSuccess={handleModuleUnlock}
+        />
+      )}
+    </div>
+  );
+}
 
 
 /* ==========================================================
@@ -5498,6 +6517,26 @@ function NotificationPage() {
       setActiveNav('overview');
     }
   }, [path]);
+
+  // 从URL参数读取notif_id，数据加载后自动打开对应通知详情
+  React.useEffect(() => {
+    if (!data.notifications || data.notifications.length === 0) return;
+    const hash = window.location.hash || '';
+    const qIndex = hash.indexOf('?');
+    if (qIndex === -1) return;
+    const qs = hash.substring(qIndex + 1);
+    const params = new URLSearchParams(qs);
+    const notifId = params.get('notif_id');
+    if (!notifId) return;
+    const target = data.notifications.find(n => n.record_id === notifId);
+    if (target) {
+      setSelectedNotif(target);
+      // 同时切到通知列表tab
+      if (activeNav !== 'notifications') {
+        setActiveNav('notifications');
+      }
+    }
+  }, [data.notifications]);
 
   const navigateTo = (key) => {
     window.location.hash = key === 'overview' ? '/notification' : `/notification/${key}`;
@@ -6704,7 +7743,9 @@ function App() {
                   ? <TeachingPage />
                   : m.path === '/notification'
                     ? <NotificationPage />
-                    : <ModulePage moduleName={m.key} icon={m.icon} color={m.color} modulePath={m.path} moduleHidden={m.hidden} />
+                    : m.path === '/daily'
+                      ? <DailyPage />
+                      : <ModulePage moduleName={m.key} icon={m.icon} color={m.color} modulePath={m.path} moduleHidden={m.hidden} />
               }
             />
           ))}

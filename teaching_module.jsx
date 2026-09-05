@@ -1,4 +1,8 @@
 /* ==========================================================
+   教务教学管理模块 TeachingPage
+   ========================================================== */
+
+/* ==========================================================
    教务教学管理模块配置
    ========================================================== */
 
@@ -104,6 +108,66 @@ function calcSemesterProgress(semester) {
   return { currentWeek, totalWeeks, percent };
 }
 
+
+// 工作名称字段三级 fallback：工作名称 / 工作标题 / 标题
+function getWorkName(fields) {
+  return fields['工作名称'] || fields['工作标题'] || fields['标题'] || '未命名';
+}
+
+// 计算学期教学检查周期（期初/期中/期末）
+function getSemesterCheckCycles(semester) {
+  if (!semester) return [];
+  const f = semester.fields;
+  const totalWeeks = Number(f['总周数']) || 18;
+  const startDate = f['开始日期'] ? new Date(f['开始日期']) : new Date();
+  
+  const addWeeks = (date, weeks) => {
+    const d = new Date(date);
+    d.setDate(d.getDate() + weeks * 7);
+    return d;
+  };
+  
+  return [
+    {
+      name: '期初教学检查',
+      startWeek: 1,
+      endWeek: 3,
+      startDate: startDate,
+      endDate: addWeeks(startDate, 3),
+      color: '#f59e0b',
+      icon: '📋',
+      desc: '开学初教学秩序与准备工作检查'
+    },
+    {
+      name: '期中教学检查',
+      startWeek: 8,
+      endWeek: 10,
+      startDate: addWeeks(startDate, 7),
+      endDate: addWeeks(startDate, 10),
+      color: '#3b82f6',
+      icon: '🔍',
+      desc: '中期教学质量与进度检查'
+    },
+    {
+      name: '期末教学检查',
+      startWeek: 15,
+      endWeek: 18,
+      startDate: addWeeks(startDate, 14),
+      endDate: addWeeks(startDate, 18),
+      color: '#ef4444',
+      icon: '📝',
+      desc: '期末考核与教学总结检查'
+    }
+  ];
+}
+
+function getCurrentCheckCycle(semester) {
+  const cycles = getSemesterCheckCycles(semester);
+  const progress = calcSemesterProgress(semester);
+  const week = progress.currentWeek;
+  return cycles.find(c => week >= c.startWeek && week <= c.endWeek) || null;
+}
+
 /* ==========================================================
    组件：教学管理模块 TeachingPage
    ========================================================== */
@@ -135,8 +199,13 @@ function TeachingPage() {
   React.useEffect(() => {
     refreshModuleLock();
     const onStorage = () => refreshModuleLock();
+    const onLockChange = () => refreshModuleLock();
     window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    window.addEventListener('oc_lock_changed', onLockChange);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('oc_lock_changed', onLockChange);
+    };
   }, []);
 
   const handleModuleUnlock = () => {
@@ -319,15 +388,13 @@ function TeachingPage() {
       {moduleLocked && !moduleUnlocked && (
         <div className="module-lock-screen">
           <div className="module-lock-content">
-            <button
-              className="module-lock-big-btn"
+            <div
+              className="module-lock-big-icon-only"
               onClick={() => setShowLockModal(true)}
               title="点击解锁"
             >
-              <div className="module-lock-big-icon">🔒</div>
-              <div className="module-lock-big-text">模块已锁定</div>
-              <div className="module-lock-big-hint">点击输入密码解锁</div>
-            </button>
+              🔒
+            </div>
           </div>
         </div>
       )}
@@ -421,7 +488,7 @@ function TeachingPage() {
               <TeachingPlaceholder title="教室档案" icon="🚪" />
             )}
             {activeNav === 'all-work' && (
-              <TeachingPlaceholder title="全部工作" icon="✅" />
+              <TeachingAllWorks works={data.works} semesters={data.semesters} />
             )}
             {activeNav === 'all-resources' && (
               <TeachingPlaceholder title="全部资源" icon="📦" />
@@ -553,6 +620,9 @@ function TeachingOverview({ semester, semesterData, allData }) {
           </div>
         </div>
       </div>
+
+      {/* 学期教学检查周期时间轴 */}
+      <SemesterCheckTimeline semester={semester} />
 
       <div className="teaching-grid-2col">
         {/* 本周工作 */}
@@ -1068,16 +1138,271 @@ function TeachingTeacherArchive({ teachers }) {
   );
 }
 
+
+/* ==========================================================
+   子页面：全部工作列表 TeachingAllWorks
+   ========================================================== */
+
+function TeachingAllWorks({ works, semesters }) {
+  const [categoryFilter, setCategoryFilter] = React.useState('all');
+  const [statusFilter, setStatusFilter] = React.useState('all');
+  const [semesterFilter, setSemesterFilter] = React.useState('all');
+  const [searchText, setSearchText] = React.useState('');
+
+  const categories = React.useMemo(() => {
+    const set = new Set();
+    works.forEach(w => {
+      const c = w.fields['分类'] || w.fields['工作分类'] || '未分类';
+      set.add(c);
+    });
+    return Array.from(set);
+  }, [works]);
+
+  const statuses = React.useMemo(() => {
+    const set = new Set();
+    works.forEach(w => {
+      const s = w.fields['状态'] || '待执行';
+      set.add(s);
+    });
+    return Array.from(set);
+  }, [works]);
+
+  const filteredWorks = React.useMemo(() => {
+    return works.filter(w => {
+      if (categoryFilter !== 'all') {
+        const cat = w.fields['分类'] || w.fields['工作分类'] || '未分类';
+        if (cat !== categoryFilter) return false;
+      }
+      if (statusFilter !== 'all') {
+        const st = w.fields['状态'] || '待执行';
+        if (st !== statusFilter) return false;
+      }
+      if (semesterFilter !== 'all') {
+        const sems = w.fields['所属学期'];
+        const semArr = Array.isArray(sems) ? sems : (sems ? [sems] : []);
+        if (!semArr.includes(semesterFilter)) return false;
+      }
+      if (searchText) {
+        const name = getWorkName(w.fields);
+        const detail = w.fields['工作详情'] || w.fields['详情'] || '';
+        if (!name.includes(searchText) && !detail.includes(searchText)) return false;
+      }
+      return true;
+    }).sort((a, b) => (b.fields['截止日期'] || 0) - (a.fields['截止日期'] || 0));
+  }, [works, categoryFilter, statusFilter, semesterFilter, searchText]);
+
+  const getSemesterName = (semIds) => {
+    if (!semIds) return '—';
+    const ids = Array.isArray(semIds) ? semIds : [semIds];
+    const names = ids.map(id => {
+      const s = semesters.find(sem => sem.record_id === id);
+      return s ? s.fields['学期名称'] : id;
+    });
+    return names.join('、');
+  };
+
+  return (
+    <div className="teaching-all-works">
+      <div className="teaching-card">
+        <div className="teaching-card-title">
+          <span>✅</span> 全部工作
+          <span className="teaching-card-badge">{filteredWorks.length}</span>
+        </div>
+
+        <div className="teaching-filter-bar">
+          <div className="teaching-filter-group">
+            <span className="teaching-filter-label">分类</span>
+            <button
+              className={'teaching-filter-btn' + (categoryFilter === 'all' ? ' active' : '')}
+              onClick={() => setCategoryFilter('all')}
+            >
+              全部
+            </button>
+            {categories.map(c => (
+              <button
+                key={c}
+                className={'teaching-filter-btn' + (categoryFilter === c ? ' active' : '')}
+                onClick={() => setCategoryFilter(c)}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+
+          <div className="teaching-filter-group">
+            <span className="teaching-filter-label">状态</span>
+            <button
+              className={'teaching-filter-btn' + (statusFilter === 'all' ? ' active' : '')}
+              onClick={() => setStatusFilter('all')}
+            >
+              全部
+            </button>
+            {statuses.map(s => (
+              <button
+                key={s}
+                className={'teaching-filter-btn' + (statusFilter === s ? ' active' : '')}
+                onClick={() => setStatusFilter(s)}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+
+          <div className="teaching-filter-group">
+            <span className="teaching-filter-label">学期</span>
+            <button
+              className={'teaching-filter-btn' + (semesterFilter === 'all' ? ' active' : '')}
+              onClick={() => setSemesterFilter('all')}
+            >
+              全部
+            </button>
+            {semesters.map(s => (
+              <button
+                key={s.record_id}
+                className={'teaching-filter-btn' + (semesterFilter === s.record_id ? ' active' : '')}
+                onClick={() => setSemesterFilter(s.record_id)}
+              >
+                {s.fields['学期名称'] || '未命名'}
+              </button>
+            ))}
+          </div>
+
+          <div className="teaching-filter-search">
+            <input
+              type="text"
+              placeholder="搜索工作名称..."
+              value={searchText}
+              onChange={e => setSearchText(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {filteredWorks.length === 0 ? (
+          <div className="teaching-empty">暂无符合条件的工作</div>
+        ) : (
+          <div className="teaching-work-table">
+            <div className="teaching-work-table-head">
+              <div className="tw-col-name">工作名称</div>
+              <div className="tw-col-cat">分类</div>
+              <div className="tw-col-status">状态</div>
+              <div className="tw-col-priority">优先级</div>
+              <div className="tw-col-due">截止日期</div>
+              <div className="tw-col-sem">所属学期</div>
+            </div>
+            <div className="teaching-work-table-body">
+              {filteredWorks.map(w => {
+                const status = w.fields['状态'] || '待执行';
+                const priority = w.fields['优先级'] || '中';
+                return (
+                  <div key={w.record_id} className="teaching-work-table-row">
+                    <div className="tw-col-name">
+                      <div className="tw-work-name">{getWorkName(w.fields)}</div>
+                      {w.fields['工作详情'] && (
+                        <div className="tw-work-detail">{w.fields['工作详情']}</div>
+                      )}
+                    </div>
+                    <div className="tw-col-cat">
+                      {w.fields['分类'] || w.fields['工作分类'] || '—'}
+                    </div>
+                    <div className="tw-col-status">
+                      <span className={'tag ' + (STATUS_COLORS[status] || 'tag-gray')}>
+                        {status}
+                      </span>
+                    </div>
+                    <div className="tw-col-priority">
+                      <span className={'tag ' + (PRIORITY_COLORS[priority] || 'tag-gray')}>
+                        {priority}
+                      </span>
+                    </div>
+                    <div className="tw-col-due">
+                      {formatDate(w.fields['截止日期']) || '—'}
+                    </div>
+                    <div className="tw-col-sem">
+                      {getSemesterName(w.fields['所属学期'])}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ==========================================================
+   组件：学期教学检查周期时间轴 SemesterCheckTimeline
+   ========================================================== */
+
+function SemesterCheckTimeline({ semester }) {
+  const cycles = getSemesterCheckCycles(semester);
+  const progress = calcSemesterProgress(semester);
+  const currentWeek = progress.currentWeek;
+  const totalWeeks = progress.totalWeeks || 18;
+
+  if (cycles.length === 0) return null;
+
+  const currentCycle = getCurrentCheckCycle(semester);
+
+  return (
+    <div className="teaching-card">
+      <div className="teaching-card-title">
+        <span>📅</span> 学期教学检查周期
+        {currentCycle && (
+          <span className="teaching-card-badge" style={{ background: currentCycle.color + '22', color: currentCycle.color }}>
+            当前：{currentCycle.name}
+          </span>
+        )}
+      </div>
+      
+      <div className="check-timeline">
+        <div className="check-timeline-track">
+          {cycles.map((c, i) => {
+            const leftPct = ((c.startWeek - 1) / totalWeeks) * 100;
+            const widthPct = ((c.endWeek - c.startWeek + 1) / totalWeeks) * 100;
+            const isActive = currentWeek >= c.startWeek && currentWeek <= c.endWeek;
+            return (
+              <div
+                key={c.name}
+                className={'check-cycle-segment' + (isActive ? ' active' : '')}
+                style={{
+                  left: leftPct + '%',
+                  width: widthPct + '%',
+                  background: c.color + '33',
+                  borderColor: c.color,
+                }}
+              >
+                <div className="check-cycle-icon" style={{ color: c.color }}>{c.icon}</div>
+                <div className="check-cycle-name">{c.name}</div>
+                <div className="check-cycle-weeks">第{c.startWeek}-{c.endWeek}周</div>
+              </div>
+            );
+          })}
+          
+          {currentWeek > 0 && (
+            <div
+              className="check-timeline-marker"
+              style={{ left: ((currentWeek - 1) / totalWeeks) * 100 + '%' }}
+            >
+              <div className="check-marker-dot"></div>
+              <div className="check-marker-label">第{currentWeek}周</div>
+            </div>
+          )}
+        </div>
+        
+        <div className="check-timeline-ruler">
+          <span>第1周</span>
+          <span>第{Math.floor(totalWeeks/2)}周</span>
+          <span>第{totalWeeks}周</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ==========================================================
    组件：占位页 TeachingPlaceholder
    ========================================================== */
 
-function TeachingPlaceholder({ title, icon }) {
-  return (
-    <div className="teaching-placeholder">
-      <div className="teaching-placeholder-icon">{icon}</div>
-      <h3 className="teaching-placeholder-title">{title}</h3>
-      <p className="teaching-placeholder-text">功能开发中，敬请期待</p>
-    </div>
-  );
-}
+function TeachingPlaceholder({ title, icon }
