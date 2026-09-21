@@ -714,6 +714,56 @@ window.apmPlus("start");
     .daily-save-hint { font-size: 12px; color: var(--text-muted, #5a5a6e); margin-right: auto; display: flex; align-items: center; gap: 6px; }
     .daily-save-hint .dot { width: 6px; height: 6px; border-radius: 50%; background: #f5c842; animation: pulse 1.5s infinite; }
     @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+    /* 教研室活动台账入口卡片 */
+    .teaching-portal-card {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 20px 24px;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(6, 182, 212, 0.08));
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      border-radius: 12px;
+      text-decoration: none;
+      color: inherit;
+      transition: all 0.25s ease;
+      cursor: pointer;
+      margin-top: 4px;
+    }
+    .teaching-portal-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(16, 185, 129, 0.5);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.15);
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(6, 182, 212, 0.12));
+    }
+    .teaching-portal-icon {
+      font-size: 36px;
+      flex-shrink: 0;
+    }
+    .teaching-portal-content {
+      flex: 1;
+      min-width: 0;
+    }
+    .teaching-portal-title {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--text-primary, #e0e0e0);
+      margin-bottom: 6px;
+    }
+    .teaching-portal-desc {
+      font-size: 12px;
+      color: var(--text-secondary, #8b8b9e);
+      line-height: 1.5;
+    }
+    .teaching-portal-arrow {
+      font-size: 20px;
+      color: #10b981;
+      flex-shrink: 0;
+      transition: transform 0.2s;
+    }
+    .teaching-portal-card:hover .teaching-portal-arrow {
+      transform: translateX(4px);
+    }
     </style>
 </head>
 <body>
@@ -5015,6 +5065,23 @@ function TeachingOverview({ semester, semesterData, allData }) {
           ))}
         </div>
       </div>
+
+      {/* 教研室活动台账入口 */}
+      <a
+        href="https://rcn3sjpjfq8e.feishu.cn/base/XScxbLsmmaRdRes010qcdqUanMB?table=tblnGFVvWF3oyIY4&view=vew6HrIBCV"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="teaching-portal-card"
+      >
+        <div className="teaching-portal-icon">📚</div>
+        <div className="teaching-portal-content">
+          <div className="teaching-portal-title">教研室活动台账</div>
+          <div className="teaching-portal-desc">
+            教研室会议 · 教学工作会议 · 调研考察 · 学术活动 · 学生竞赛 · 培训进修 · 评审评估
+          </div>
+        </div>
+        <div className="teaching-portal-arrow">→</div>
+      </a>
     </div>
   );
 }
@@ -5961,6 +6028,9 @@ function DailyPage() {
         const weekday = getWeekdayCN(dateObj);
         const fields = {
           ...buildDailySkeleton(selectedDate, weekday),
+          '已完成任务': editData['已完成任务'] || '',
+          '进行中任务': editData['进行中任务'] || '',
+          '今日会议': editData['今日会议'] || '',
           '临时工作': editData['临时工作'] || '',
           '明日计划': editData['明日计划'] || '',
           '反思备注': editData['反思备注'] || '',
@@ -6175,44 +6245,41 @@ function DailyPage() {
 
                 <div className="daily-detail-body">
                   {/* 自动记录区（只读） */}
-                  <div className="daily-section">
-                    <h3 className="daily-section-title readonly">📚 自动记录区</h3>
-
-                    <div className="daily-field-group">
-                      <div className="daily-field-label">已完成任务</div>
-                      <div className={'daily-field-value' + (currentRecord.fields['已完成任务'] ? '' : ' empty')}>
-                        {currentRecord.fields['已完成任务'] || '暂无数据'}
-                      </div>
-                    </div>
-
-                    <div className="daily-field-group">
-                      <div className="daily-field-label">进行中任务</div>
-                      <div className={'daily-field-value' + (currentRecord.fields['进行中任务'] ? '' : ' empty')}>
-                        {currentRecord.fields['进行中任务'] || '暂无数据'}
-                      </div>
-                    </div>
-
-                    <div className="daily-field-group">
-                      <div className="daily-field-label">今日会议</div>
-                      <div className={'daily-field-value' + (currentRecord.fields['今日会议'] ? '' : ' empty')}>
-                        {currentRecord.fields['今日会议'] || '暂无数据'}
-                      </div>
-                    </div>
-
-                    {currentRecord.fields['新增任务'] && (
-                      <div className="daily-field-group">
-                        <div className="daily-field-label">新增任务</div>
-                        <div className="daily-field-value">
-                          {currentRecord.fields['新增任务']}
-                        </div>
-                      </div>
-                    )}
-                  </div>
 
                   {/* 可编辑区 */}
                   <div className="daily-section">
-                    <h3 className="daily-section-title">✏️ 可编辑区</h3>
+                    <h3 className="daily-section-title">📝 日报内容</h3>
 
+
+                    <div className="daily-field-group">
+                      <label className="daily-field-label">已完成任务</label>
+                      <textarea
+                        className="daily-field-textarea"
+                        value={editData['已完成任务'] || ''}
+                        onChange={e => handleFieldChange('已完成任务', e.target.value)}
+                        placeholder="每行一项，已完成的工作..."
+                      />
+                    </div>
+
+                    <div className="daily-field-group">
+                      <label className="daily-field-label">进行中任务</label>
+                      <textarea
+                        className="daily-field-textarea"
+                        value={editData['进行中任务'] || ''}
+                        onChange={e => handleFieldChange('进行中任务', e.target.value)}
+                        placeholder="每行一项，进行中的工作..."
+                      />
+                    </div>
+
+                    <div className="daily-field-group">
+                      <label className="daily-field-label">今日会议</label>
+                      <textarea
+                        className="daily-field-textarea"
+                        value={editData['今日会议'] || ''}
+                        onChange={e => handleFieldChange('今日会议', e.target.value)}
+                        placeholder="每行一项，今日的会议安排..."
+                      />
+                    </div>
                     <div className="daily-field-group">
                       <label className="daily-field-label">临时工作</label>
                       <textarea
